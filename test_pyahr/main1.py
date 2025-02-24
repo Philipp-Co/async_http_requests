@@ -1,4 +1,4 @@
-from python_async_requests.pyahr.async_http_requests import Processor, Request, Response, DefaultEventHandler
+from pyahr.async_http_requests import Processor, Request, Response, DefaultEventHandler
 from time import sleep
 from typing import Optional
 
