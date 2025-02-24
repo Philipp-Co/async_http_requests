@@ -2,18 +2,9 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 
 #include <curl/curl.h>
-
-#define AHR_HEADER_NMAX 256
-
-
-
-typedef struct 
-{
-    AHR_HeaderEntry_t header[AHR_HEADER_NMAX];    
-    size_t nheaders;
-} AHR_Header_t;
 
 typedef struct
 {
@@ -24,6 +15,8 @@ typedef struct
 
 struct AHR_HttpRequest
 {
+    void *uuid;
+
     int file_descriptor;
     char *url;
     CURL *handle;
@@ -36,6 +29,7 @@ struct AHR_HttpResponse
 {
     AHR_Body_t body;
     AHR_HttpRequest_t request;
+    AHR_Header_t header;
 };
 
 static size_t AHR_WriteCallback(char *data, size_t size, size_t nmemb, void *clientp);
@@ -75,7 +69,9 @@ AHR_HttpRequest_t AHR_CreateRequest(void)
     request->handle = curl_easy_init();
     curl_easy_setopt(request->handle, CURLOPT_WRITEFUNCTION, AHR_WriteCallback);
     curl_easy_setopt(request->handle, CURLOPT_HEADERFUNCTION, AHR_HeaderCallback);
-    
+   
+    request->uuid = request;
+
     return request;
 }
 
@@ -135,6 +131,7 @@ void AHR_Post(AHR_HttpRequest_t request, const char **headers, const char *body)
         list = curl_slist_append(list, headers[i]);
     }
     curl_easy_setopt(request->handle, CURLOPT_HTTPHEADER, list);
+    curl_slist_free_all(list);
     
     AHR_MakeRequest(request, NULL);
 }
@@ -152,6 +149,7 @@ void AHR_Get(AHR_HttpRequest_t request, const char *url, const char* const* head
         list = curl_slist_append(list, headers[i]);
     }
     curl_easy_setopt(request->handle, CURLOPT_HTTPHEADER, list);
+    curl_slist_free_all(list);
     // set userdata for callback
     curl_easy_setopt(request->handle, CURLOPT_WRITEDATA, response);
     curl_easy_setopt(request->handle, CURLOPT_HEADERDATA, response);
@@ -164,34 +162,62 @@ const char* AHR_ResponseBody(const AHR_HttpResponse_t response)
     return response->body.data;
 }
 
-void AHR_ResponseHeader(const AHR_HttpResponse_t response, AHR_HeaderInfo_t *info)
+void AHR_ResponseHeader(const AHR_HttpResponse_t response, AHR_Header_t *info)
 {
+    long redirect_count = 0;
+    curl_easy_getinfo(response->request->handle, CURLINFO_REDIRECT_COUNT, &redirect_count);
+    printf("Redirect Count: %lu\n", redirect_count);
+    memcpy(info, &response->header, sizeof(AHR_Header_t));
+    /*
     size_t i = 0;
     struct curl_header *prev = NULL;
     struct curl_header *h;
-    while(i < info->maxheader && (h = curl_easy_nextheader(response->request->handle, CURLH_HEADER, 0, prev))) {
-      memcpy(info->entries[i].name, h->name, strlen(h->name));
-      memcpy(info->entries[i].value, h->value, strlen(h->value));
-      prev = h;
-      ++i;
+    while(
+        i < info->maxheader && 
+        (h = curl_easy_nextheader(response->request->handle, CURLH_HEADER, 0, prev))
+    )
+    {
+        printf("Header %lu - %s, %s\n", i, h->name, h->value);
+        memcpy(info->entries[i].name, h->name, strlen(h->name));
+        memcpy(info->entries[i].value, h->value, strlen(h->value));
+        prev = h;
+        ++i;
     }
  
-    /* extract the normal headers + 1xx + trailers from the last request */
+    // extract the normal headers + 1xx + trailers from the last request
     unsigned int origin = CURLH_HEADER| CURLH_1XX | CURLH_TRAILER;
-    while(i < info->maxheader && (h = curl_easy_nextheader(response->request->handle, origin, -1, prev))) {
-      memcpy(info->entries[i].name, h->name, strlen(h->name));
-      memcpy(info->entries[i].value, h->value, strlen(h->value));
-      prev = h;      
-      ++i;
+    while(
+        i < info->maxheader && 
+        (h = curl_easy_nextheader(response->request->handle, origin, -1, prev))
+    )
+    {
+        printf("Header %lu - %s, %s\n", i, h->name, h->value);
+        memcpy(info->entries[i].name, h->name, strlen(h->name));
+        memcpy(info->entries[i].value, h->value, strlen(h->value));
+        prev = h;      
+        ++i;
     }
     info->nheader = i;
+    */
 }
 
 long AHR_ResponseStatusCode(const AHR_HttpResponse_t response)
 {
     long status = -1;
+    printf("Status Code Response object: %p\n", response);
     curl_easy_getinfo(response->request->handle, CURLINFO_RESPONSE_CODE, &status);
+    printf("Status Code: %lu\n", status);
     return status;
+}
+
+void* AHR_ResponseUUID(const AHR_HttpResponse_t response)
+{
+    return response->request->uuid;
+}
+
+void* AHR_RequestUUID(const AHR_HttpRequest_t request)
+{
+    return request->uuid;
 }
 
 //
@@ -225,5 +251,46 @@ static size_t AHR_WriteCallback(char *data, size_t size, size_t nmemb, void *cli
 
 static size_t AHR_HeaderCallback(char *buffer, size_t size, size_t nitems, void *userdata)
 {
+    AHR_HttpResponse_t response = (AHR_HttpResponse_t)userdata; 
+    if(!response) return CURLE_READ_ERROR;
+
+    //printf("%s\n", buffer);
+    if(strlen(buffer) < 3)
+    {
+        return size * nitems;
+    }
+
+    char *token = strchr(buffer, ':');
+    if(!token)
+    {
+        printf("Error unable to parse Header %s\n", buffer);
+        return size * nitems;
+    }
+    
+    //
+    // remove ':' and  ltrim
+    //
+    token += 1;
+    while(!isalnum(*token) && '\0' != *token)
+    {
+        ++token;
+    }
+
+    memset(
+        &response->header.header[response->header.nheaders],
+        '\0',
+        sizeof(response->header.header[response->header.nheaders])
+    );
+    memcpy(
+        response->header.header[response->header.nheaders].name,
+        buffer,
+        token - buffer
+    );
+    memcpy(
+        response->header.header[response->header.nheaders].value,
+        token,
+        strlen(token)
+    );
+    response->header.nheaders++;
     return size * nitems;
 }

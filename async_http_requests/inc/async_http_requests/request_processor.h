@@ -34,7 +34,14 @@ typedef struct AHR_Processor* AHR_Processor_t;
 struct AHR_Result;
 typedef struct AHR_Result* AHR_Result_t;
 
-typedef void (*AHR_ResponseReadyCallback)(AHR_HttpResponse_t response);
+typedef void (*AHR_ResponseReadyCallback)(void *user_data, AHR_HttpResponse_t response);
+
+typedef struct
+{
+    void *data;
+    AHR_ResponseReadyCallback on_success;
+} AHR_UserData_t;
+
 //
 // --------------------------------------------------------------------------------------------------------------------
 //
@@ -49,7 +56,7 @@ void AHR_DestroyProcessor(AHR_Processor_t *processor);
 ///
 /// \brief  Execute a GET-Request.
 ///
-void AHR_ProcessorGet(AHR_Processor_t processor, const char *url, AHR_ResponseReadyCallback callback);
+void* AHR_ProcessorGet(AHR_Processor_t processor, const char *url, AHR_UserData_t user_data);
 //
 // --------------------------------------------------------------------------------------------------------------------
 //

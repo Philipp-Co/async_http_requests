@@ -33,6 +33,8 @@
 #define AHR_HEADERENTRY_NAME_LEN 256
 #define AHR_HEADERENTRY_VALUE_LEN (4096 - (AHR_HEADERENTRY_NAME_LEN))
 
+#define AHR_HEADER_NMAX 256
+
 //
 // --------------------------------------------------------------------------------------------------------------------
 //
@@ -45,10 +47,9 @@ typedef struct
 
 typedef struct 
 {
-    AHR_HeaderEntry_t *entries;
-    size_t nheader;
-    size_t maxheader;
-} AHR_HeaderInfo_t;
+    AHR_HeaderEntry_t header[AHR_HEADER_NMAX];    
+    size_t nheaders;
+} AHR_Header_t;
 
 struct AHR_HttpRequest;
 typedef struct AHR_HttpRequest* AHR_HttpRequest_t;
@@ -139,7 +140,7 @@ const char* AHR_ResponseBody(const AHR_HttpResponse_t response);
 ///
 /// \brief  Get the Response Headers for the given Object.
 ///
-void AHR_ResponseHeader(const AHR_HttpResponse_t response, AHR_HeaderInfo_t *info);
+void AHR_ResponseHeader(const AHR_HttpResponse_t response, AHR_Header_t *info);
 ///
 /// \brief  Get the HTTP Status Code for the given Object.
 /// \returns long - On Success the value will be positive and contains a valid HTTP Status Code.
@@ -156,6 +157,9 @@ long AHR_ResponseStatusCode(const AHR_HttpResponse_t response);
 /// \returns    AHR_Status_t
 ///
 AHR_Status_t AHR_MakeRequest(AHR_HttpRequest_t request, AHR_HttpResponse_t response); 
+
+void* AHR_ResponseUUID(const AHR_HttpResponse_t response);
+void* AHR_RequestUUID(const AHR_HttpRequest_t request);
 //
 // --------------------------------------------------------------------------------------------------------------------
 //

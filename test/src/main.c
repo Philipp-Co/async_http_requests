@@ -7,7 +7,7 @@
 
 static int done = 0;
 
-static void Callback(AHR_HttpResponse_t response)
+static void Callback(void *user_data, AHR_HttpResponse_t response)
 {
     printf("--------------------------------------------------------------\n");
     printf("%s\n", AHR_ResponseBody(response));
@@ -18,11 +18,16 @@ static void Callback(AHR_HttpResponse_t response)
 int main(int argc, char **argv)
 {
     AHR_Processor_t processor = AHR_CreateProcessor();
-    
-    AHR_ProcessorGet(processor, "www.google.de", Callback);
-    AHR_ProcessorGet(processor, "www.amazon.de", Callback);
-    AHR_ProcessorGet(processor, "www.web.de", Callback);
-    AHR_ProcessorGet(processor, "www.ppilihpllork.de", Callback);
+
+    AHR_UserData_t user_data = {
+        .data = NULL,
+        .on_success = Callback
+    };
+
+    AHR_ProcessorGet(processor, "www.google.de", user_data);
+    AHR_ProcessorGet(processor, "www.amazon.de", user_data);
+    AHR_ProcessorGet(processor, "www.web.de", user_data);
+    AHR_ProcessorGet(processor, "www.ppilihpllork.de", user_data);
 
     do
     {

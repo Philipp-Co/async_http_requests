@@ -38,7 +38,8 @@ struct AHR_Result
     size_t error;
     AHR_HttpRequest_t request;
     AHR_HttpResponse_t response;
-    AHR_ResponseReadyCallback callback;
+
+    AHR_UserData_t user_data;
 };
 
 struct AHR_RequestListNode;
@@ -181,11 +182,12 @@ void AHR_DestroyProcessor(AHR_Processor_t *processor)
 
     curl_multi_cleanup((*processor)->handle);
 
+    printf("Processor %p destroyed\n", *processor);
     free(*processor);
     *processor = NULL;
 }
 
-void AHR_ProcessorGet(AHR_Processor_t processor, const char *url, AHR_ResponseReadyCallback callback)
+void* AHR_ProcessorGet(AHR_Processor_t processor, const char *url, AHR_UserData_t user_data)
 {
     const char* const headers[] ={
         NULL
@@ -203,15 +205,16 @@ void AHR_ProcessorGet(AHR_Processor_t processor, const char *url, AHR_ResponseRe
     if(!result)
     {
         printf("Error while poping unused result!\n");
-        return;
+        return NULL;
     }
     AHR_Get(result->request, url, headers, result->response);
-    result->callback = callback;
+    result->user_data = user_data;
     
     AHR_StackPush(&processor->requests, result);
     pthread_mutex_unlock(&processor->mutex);
 
     curl_multi_wakeup(processor->handle);
+    return AHR_RequestUUID(result->request);
 }
 
 bool AHR_ProcessorIsResultReady(AHR_Result_t result)
@@ -324,7 +327,7 @@ static AHR_Result_t AHR_CreateResult(void)
     result->request = request;
     result->response = response;
     atomic_store(&(result->done), 0);
-    result->callback = NULL;
+    result->user_data.on_success = NULL;
 
     return result;
 }
@@ -384,14 +387,14 @@ static void AHR_ExecuteAndPoll(AHR_Processor_t processor)
                         printf("Error %i for handler %p\n", m->data.result, m->easy_handle);
                     }
 
-                    curl_multi_remove_handle(processor->handle, m->easy_handle);
                     AHR_Result_t result = AHR_RequestListFind(
                         &processor->result_list,
                         m->easy_handle
                     );
                     if(result)
                     {
-                        result->callback(
+                        result->user_data.on_success(
+                            result->user_data.data,
                             result->response
                         );
                         const bool r = AHR_RequestListRemove(
@@ -414,6 +417,7 @@ static void AHR_ExecuteAndPoll(AHR_Processor_t processor)
                     {
                         printf("handle not found!\n");
                     }
+                    curl_multi_remove_handle(processor->handle, m->easy_handle);
                 }
             }
             while(m);
