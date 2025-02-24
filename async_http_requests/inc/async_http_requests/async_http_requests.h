@@ -11,7 +11,7 @@
 ///             {
 ///                 AHR_Response response = AHR_CreateResponse();
 ///                 const AHR_Status response_status = AHR_GetResponse(request, response);
-///                 AHR_PrintResponse(response);
+///                 printf("Status Code: %i\n", response_status);
 ///             }
 ///
 
@@ -25,6 +25,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
+
+#include <async_http_requests/logging.h>
 
 //
 // --------------------------------------------------------------------------------------------------------------------
@@ -97,6 +99,10 @@ void AHR_DestroyResponse(AHR_HttpResponse_t *response);
 /// \brief  Destroys a Request Object.
 ///
 void AHR_DestroyRequest(AHR_HttpRequest_t *request);
+
+void AHR_RequestSetLogger(AHR_HttpRequest_t request, AHR_Logger_t logger);
+void AHR_ResponseSetLogger(AHR_HttpResponse_t response, AHR_Logger_t logger);
+
 ///
 /// \brief  Set the given HTTP Header for the Request Object.
 /// \param[in, out] request - Request Object.
@@ -157,8 +163,13 @@ long AHR_ResponseStatusCode(const AHR_HttpResponse_t response);
 /// \returns    AHR_Status_t
 ///
 AHR_Status_t AHR_MakeRequest(AHR_HttpRequest_t request, AHR_HttpResponse_t response); 
-
+///
+/// \brief  Get a unique Id which identifies this response object.
+///
 void* AHR_ResponseUUID(const AHR_HttpResponse_t response);
+///
+/// \brief  Get a unique Id which identifies this request object.
+///
 void* AHR_RequestUUID(const AHR_HttpRequest_t request);
 //
 // --------------------------------------------------------------------------------------------------------------------

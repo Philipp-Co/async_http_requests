@@ -1,3 +1,8 @@
+
+//
+// --------------------------------------------------------------------------------------------------------------------
+//
+
 #include <async_http_requests/async_http_requests.h>
 
 #include <stdio.h>
@@ -5,6 +10,10 @@
 #include <ctype.h>
 
 #include <curl/curl.h>
+
+//
+// --------------------------------------------------------------------------------------------------------------------
+//
 
 typedef struct
 {
@@ -21,6 +30,8 @@ struct AHR_HttpRequest
     char *url;
     CURL *handle;
 
+    AHR_Logger_t logger;
+
     char **header;
     AHR_Body_t body;
 };
@@ -29,13 +40,22 @@ struct AHR_HttpResponse
 {
     AHR_Body_t body;
     AHR_HttpRequest_t request;
+    AHR_Logger_t logger;
     AHR_Header_t header;
 };
+
+//
+// --------------------------------------------------------------------------------------------------------------------
+//
 
 static size_t AHR_WriteCallback(char *data, size_t size, size_t nmemb, void *clientp);
 static size_t AHR_HeaderCallback(char *buffer, size_t size, size_t nitems, void *userdata);
 
 static size_t AHR_ResponseAddHeader(AHR_HttpResponse_t response, const char* header, size_t nbytes);
+
+//
+// --------------------------------------------------------------------------------------------------------------------
+//
 
 void* AHR_RequestHandle(AHR_HttpRequest_t request)
 {
@@ -75,16 +95,14 @@ AHR_HttpRequest_t AHR_CreateRequest(void)
     return request;
 }
 
-void AHR_PrintRequest(const AHR_HttpRequest_t request)
+void AHR_RequestSetLogger(AHR_HttpRequest_t request, AHR_Logger_t logger)
 {
-    printf(
-        "{\"file_descriptor\": %i}\n", request->file_descriptor
-    );
+    request->logger = logger;
 }
 
-void AHR_PrintResponse(const AHR_HttpResponse_t response)
+void AHR_ResponseSetLogger(AHR_HttpResponse_t response, AHR_Logger_t logger)
 {
-
+    response->logger = logger;
 }
 
 void AHR_DestroyResponse(AHR_HttpResponse_t *response)
@@ -166,47 +184,13 @@ void AHR_ResponseHeader(const AHR_HttpResponse_t response, AHR_Header_t *info)
 {
     long redirect_count = 0;
     curl_easy_getinfo(response->request->handle, CURLINFO_REDIRECT_COUNT, &redirect_count);
-    printf("Redirect Count: %lu\n", redirect_count);
     memcpy(info, &response->header, sizeof(AHR_Header_t));
-    /*
-    size_t i = 0;
-    struct curl_header *prev = NULL;
-    struct curl_header *h;
-    while(
-        i < info->maxheader && 
-        (h = curl_easy_nextheader(response->request->handle, CURLH_HEADER, 0, prev))
-    )
-    {
-        printf("Header %lu - %s, %s\n", i, h->name, h->value);
-        memcpy(info->entries[i].name, h->name, strlen(h->name));
-        memcpy(info->entries[i].value, h->value, strlen(h->value));
-        prev = h;
-        ++i;
-    }
- 
-    // extract the normal headers + 1xx + trailers from the last request
-    unsigned int origin = CURLH_HEADER| CURLH_1XX | CURLH_TRAILER;
-    while(
-        i < info->maxheader && 
-        (h = curl_easy_nextheader(response->request->handle, origin, -1, prev))
-    )
-    {
-        printf("Header %lu - %s, %s\n", i, h->name, h->value);
-        memcpy(info->entries[i].name, h->name, strlen(h->name));
-        memcpy(info->entries[i].value, h->value, strlen(h->value));
-        prev = h;      
-        ++i;
-    }
-    info->nheader = i;
-    */
 }
 
 long AHR_ResponseStatusCode(const AHR_HttpResponse_t response)
 {
     long status = -1;
-    printf("Status Code Response object: %p\n", response);
     curl_easy_getinfo(response->request->handle, CURLINFO_RESPONSE_CODE, &status);
-    printf("Status Code: %lu\n", status);
     return status;
 }
 
@@ -254,16 +238,15 @@ static size_t AHR_HeaderCallback(char *buffer, size_t size, size_t nitems, void 
     AHR_HttpResponse_t response = (AHR_HttpResponse_t)userdata; 
     if(!response) return CURLE_READ_ERROR;
 
-    //printf("%s\n", buffer);
     if(strlen(buffer) < 3)
     {
+        AHR_LogWarning(response->logger, "Unable to parse HTTP header...");
         return size * nitems;
     }
 
     char *token = strchr(buffer, ':');
     if(!token)
     {
-        printf("Error unable to parse Header %s\n", buffer);
         return size * nitems;
     }
     
@@ -294,3 +277,7 @@ static size_t AHR_HeaderCallback(char *buffer, size_t size, size_t nitems, void 
     response->header.nheaders++;
     return size * nitems;
 }
+
+//
+// --------------------------------------------------------------------------------------------------------------------
+//

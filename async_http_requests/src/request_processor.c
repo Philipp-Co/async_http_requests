@@ -64,6 +64,7 @@ typedef struct
 ///
 struct AHR_Processor
 {
+    AHR_Logger_t logger;
     ///
     /// \brief  Thread Id.
     /// 
@@ -132,13 +133,12 @@ static void* AHR_ProcessorThreadFunc(void *arg);
 // --------------------------------------------------------------------------------------------------------------------
 //
 
-AHR_Processor_t AHR_CreateProcessor(void)
+AHR_Processor_t AHR_CreateProcessor(AHR_Logger_t logger)
 {
     //
     // Create a AHR_Processor_t handle.
     // The internal Datastructure sizes are dericved from AHR_NRESULTS.
     //
-
     AHR_Processor_t processor = malloc(sizeof(struct AHR_Processor));
     processor->handle = curl_multi_init();
     //processor->request_list.head = NULL;
@@ -151,6 +151,8 @@ AHR_Processor_t AHR_CreateProcessor(void)
     for(size_t i=0;i<AHR_NRESULTS;++i)
     {
         AHR_Result_t new = AHR_CreateResult();
+        AHR_RequestSetLogger(new->request, logger);
+        AHR_ResponseSetLogger(new->response, logger);
         AHR_StackPush(&processor->unused_results, new);
         //CURLMcode c = curl_multi_add_handle(
         //    processor->handle,
@@ -162,12 +164,11 @@ AHR_Processor_t AHR_CreateProcessor(void)
     
     pthread_mutex_init(&(processor->mutex), NULL);
     atomic_store(&(processor->terminate), 0);
+
+    processor->logger = logger;
+
     if(0 == pthread_create(&(processor->thread_id), NULL, AHR_ProcessorThreadFunc, processor))
         return processor;
-    else
-    {
-        printf("%s\n", strerror(errno));
-    }
     free(processor);
     return NULL;
 }
@@ -181,8 +182,7 @@ void AHR_DestroyProcessor(AHR_Processor_t *processor)
     pthread_join((*processor)->thread_id, &result);
 
     curl_multi_cleanup((*processor)->handle);
-
-    printf("Processor %p destroyed\n", *processor);
+    
     free(*processor);
     *processor = NULL;
 }
@@ -204,7 +204,7 @@ void* AHR_ProcessorGet(AHR_Processor_t processor, const char *url, AHR_UserData_
     result = AHR_StackPop(&processor->unused_results);
     if(!result)
     {
-        printf("Error while poping unused result!\n");
+        AHR_LogWarning(processor->logger, "Warning: Unable to retrieve unused element.");
         return NULL;
     }
     AHR_Get(result->request, url, headers, result->response);
@@ -352,7 +352,7 @@ static void AHR_HandleNewRequests(AHR_Processor_t processor)
                 }
                 else
                 {
-                    printf("Unable to integrate result...\n");
+                    AHR_LogWarning(processor->logger, "Unable to give previously used Element back.");
                     AHR_DestroyResult(&new);
                 }
             }
@@ -384,7 +384,8 @@ static void AHR_ExecuteAndPoll(AHR_Processor_t processor)
                 {
                     if(CURLE_OK != m->data.result)
                     {
-                        printf("Error %i for handler %p\n", m->data.result, m->easy_handle);
+                        //printf("Error %i for handler %p\n", m->data.result, m->easy_handle);
+                        AHR_LogInfo(processor->logger, "Error for CURL Handle.");
                     }
 
                     AHR_Result_t result = AHR_RequestListFind(
@@ -425,7 +426,8 @@ static void AHR_ExecuteAndPoll(AHR_Processor_t processor)
         mc = curl_multi_poll(processor->handle, NULL, 0, 1000, &num_fds); 
         if(CURLM_OK != mc)
         {
-            printf("Error while polling!\n");
+            //printf("Error while polling!\n");
+            AHR_LogError(processor->logger, "Error while polling!");
         }
     }
 }

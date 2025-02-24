@@ -1,4 +1,4 @@
-""""""
+"""This Module implements the HTTP Request Processor."""
 #
 # ---------------------------------------------------------------------------------------------------------------------
 #
@@ -11,10 +11,11 @@ from logging import getLogger, Logger
 from typing import Optional, List
 from ctypes import cdll, byref, POINTER,pointer, c_void_p, c_char, CFUNCTYPE, c_char_p, Structure, py_object
 from ctypes import c_size_t
-from python_async_requests.pyahr import _libahr, AHR_UserData, AHR_HeaderInfo, AHR_HeaderEntry
+from pyahr import _libahr, AHR_UserData, AHR_HeaderInfo, AHR_HeaderEntry
 from .utils.string_decoder import StringDecoder, Utf8Decoder
 from copy import deepcopy
 from .interfaces.event_handler import EventHandler
+from json import dumps
 
 #
 # ---------------------------------------------------------------------------------------------------------------------
@@ -46,11 +47,46 @@ class DefaultEventHandler(EventHandler):
 
 
 class Processor:
+    """HTTP Request Processor."""
+    
+    @CFUNCTYPE(c_void_p, py_object, c_char_p)
+    def __log_info(self, msg):
+        print(msg)
+        self.__logger.info(msg)
+        pass
+    
+    @CFUNCTYPE(c_void_p, py_object, c_char_p)
+    def __log_warning(self, msg):
+        print(msg)
+        self.__logger.warning(msg)
+        pass
+    
+    @CFUNCTYPE(c_void_p, py_object, c_char_p)
+    def __log_error(self, msg):
+        print(msg)
+        self.__logger.error(msg)
+        pass
 
     def __init__(self, url: str, event_handler: EventHandler, logger: Optional[Logger] = None):
+        """Constructor.
+        
+        Args:
+            url: str: The Base URL to send Requests to.
+            event_handler: EventHandler: A Handler that is called for each received HTTP Response.
+            logger: Optional[Logger] = None: The Logger to be used.
+        """
         self.__logger: Logger = logger if logger is not None else getLogger(self.__class__.__name__);
         # AHR_Processotr_t Handle
-        self.__ahr_processor = _libahr.AHR_CreateProcessor()
+        func = CFUNCTYPE(c_void_p, c_void_p, c_char_p),
+        self.__ahr_logger = _libahr.AHR_CreateLogger(
+            py_object(self),
+            self.__log_info,
+            self.__log_warning,
+            self.__log_error,
+        )
+        self.__ahr_processor = _libahr.AHR_CreateProcessor(
+            self.__ahr_logger
+        )
         # Response Body Decoder
         self.__string_decoder: StringDecoder = Utf8Decoder()
 
@@ -60,16 +96,30 @@ class Processor:
         pass
 
     def __reduce__ex(self):
+        """Due to libahr Dependencies reduction is not allowed."""
         raise AssertionError('This object may not be serialized due to dependencies to libahr.')
 
     def __reduce__(self):
+        """Due to libahr Dependencies reduction is not allowed."""
         raise AssertionError('This object may not be serialized due to dependencies to libahr.')
 
     def __del__(self):
+        """Destructor.
+        
+        Destroyes created _libahr Objects.
+        """
         _libahr.AHR_DestroyProcessor(byref(self.__ahr_processor))
+        _libahr.AHR_DestroyLogger(byref(self.__ahr_logger))
         pass
 
     def set_string_decoder(self, decoder: StringDecoder) -> Self:
+        """Set the Stringdecode.
+        
+        The Stringdecoder is used to decode the Responsebody received by the remote server.
+
+        Returns:
+            Self: A Reference to this object.
+        """
         self.__string_decoder = decoder
         return self
 
@@ -114,6 +164,7 @@ class Processor:
         pass
 
     def get(self, request: Request) -> Self:
+        """Create and execute a HTTP GET Request."""
         #
         # deepcopy the request object.
         # the requestobject shall not be changed during the request-process.
@@ -130,18 +181,29 @@ class Processor:
         return self
     
     def post(self, equest: Request) -> Self:
+        """Create and execute a HTTP GET Request."""
         return self
 
     def put(self, request: Request) -> Self:
+        """Create and execute a HTTP GET Request."""
         return self
 
     def delete(self, request: Request) -> Self:
+        """Create and execute a HTTP GET Request."""
         return self
     
     def number_of_pending_requests(self) -> int:
+        """Get the number of pending requests.
+        
+        Returns the number of requests for which no response was received yet.
+
+        Returns:
+            int: A Number.
+        """
         return len(self.__requests)
 
     def pending_requests(self) -> List[int]:
+        """Returns the Ids of pending requests."""
         return [key for key in self.__requests]
 
     def __repr__(self):
@@ -150,6 +212,11 @@ class Processor:
                 key for key in self.__requests.keys()
             ], 
         }
+    
+    def __str__(self) -> str:
+        return dumps(
+            self.__repr__()
+        )
 
     pass
 

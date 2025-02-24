@@ -22,12 +22,15 @@
 // --------------------------------------------------------------------------------------------------------------------
 //
 #include "async_http_requests/async_http_requests.h"
+#include <async_http_requests/logging.h>
 
 #include <stdlib.h>
 #include <stdbool.h>
 //
 // --------------------------------------------------------------------------------------------------------------------
 //
+
+
 struct AHR_Processor;
 typedef struct AHR_Processor* AHR_Processor_t;
 
@@ -48,7 +51,7 @@ typedef struct
 ///
 /// \brief  Create a new AHR_Processor_t Object.  
 ///
-AHR_Processor_t AHR_CreateProcessor(void);
+AHR_Processor_t AHR_CreateProcessor(AHR_Logger_t logger);
 ///
 /// \brief  Destroy the given Processor-Object.
 ///

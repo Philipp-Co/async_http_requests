@@ -8,6 +8,7 @@ add_library(
     async_http_requests/src/async_http_requests.c
     async_http_requests/src/request_processor.c
     async_http_requests/src/stack.c
+    async_http_requests/src/logging.c
 )
 
 target_compile_options(
