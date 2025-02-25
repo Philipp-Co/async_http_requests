@@ -6,8 +6,8 @@ if not _is_initialized:
 
     from ctypes import cdll, byref, POINTER,pointer, c_void_p, c_char, CFUNCTYPE, c_char_p, c_long, Structure, py_object, c_size_t
     from os import environ
-
-    lib_path: str = environ.get('LIB_AHR_PATH', 'build/libahr.dylib')
+    
+    lib_path: str = environ.get('LIB_AHR_PATH', 'libahr.dylib')
 
     class AHR_HeaderEntry(Structure):
 
