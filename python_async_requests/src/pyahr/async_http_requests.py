@@ -46,7 +46,6 @@ class DefaultEventHandler(EventHandler):
 # ---------------------------------------------------------------------------------------------------------------------
 #
 
-
 class Processor:
     """HTTP Request Processor."""
     

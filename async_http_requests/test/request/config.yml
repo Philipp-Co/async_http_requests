@@ -1,0 +1,12 @@
+---
+:cmock:
+  :plugins: [
+    callback,
+    return_thru_ptr,
+    ignore_arg,
+    ignore
+  ]
+  :includes: []
+  :mock_path: ./mocks/
+  :mock_prefix: mock_
+  :treat_inlines: :include

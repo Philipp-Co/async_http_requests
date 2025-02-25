@@ -30,6 +30,7 @@
 // --------------------------------------------------------------------------------------------------------------------
 //
 
+typedef void* AHR_Id_t;
 
 struct AHR_Processor;
 typedef struct AHR_Processor* AHR_Processor_t;
@@ -63,13 +64,15 @@ AHR_Processor_t AHR_CreateProcessor(AHR_Logger_t logger);
 /// \brief  Destroy the given Processor-Object.
 ///
 void AHR_DestroyProcessor(AHR_Processor_t *processor);
+bool AHR_ProcessorStart(AHR_Processor_t processor);
+void AHR_ProcessorStop(AHR_Processor_t processor);
 ///
 /// \brief  Execute a GET-Request.
 ///
-void* AHR_ProcessorGet(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data);
-void* AHR_ProcessorPost(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data);
-void* AHR_ProcessorPut(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data);
-void* AHR_ProcessorDelete(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data);
+AHR_Id_t AHR_ProcessorGet(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data);
+AHR_Id_t AHR_ProcessorPost(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data);
+AHR_Id_t AHR_ProcessorPut(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data);
+AHR_Id_t AHR_ProcessorDelete(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data);
 //
 // --------------------------------------------------------------------------------------------------------------------
 //

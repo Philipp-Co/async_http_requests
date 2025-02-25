@@ -1,13 +1,28 @@
 #!python
+"""Unittest for python_async_http_requests."""
 
-from unittest import TestCase, TestSuite, TextTestRunner, TestLoader
+#
+# ---------------------------------------------------------------------------------------------------------------------
+#
 
+if __name__ == '__main__':
 
-runner: TextTestRunner = TextTestRunner()
-runner.run(
-    TestLoader().discover(
-        start_dir='tests/',
-        pattern='test_*.py',
+    from unittest import TestCase, TestSuite, TextTestRunner, TestLoader
+
+    runner: TextTestRunner = TextTestRunner()
+    exit(
+        1-int(
+            runner.run(
+                TestLoader().discover(
+                    start_dir='tests/',
+                    pattern='test_*.py',
+                )
+            ).wasSuccessful()
+        )
     )
-)
 
+exit(-1)
+
+#
+# ---------------------------------------------------------------------------------------------------------------------
+#

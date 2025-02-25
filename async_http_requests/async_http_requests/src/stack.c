@@ -3,6 +3,8 @@
 // --------------------------------------------------------------------------------------------------------------------
 //
 
+#include <assert.h>
+
 #include <async_http_requests/stack.h>
 
 //
@@ -25,6 +27,7 @@ void AHR_DestroyStack(AHR_Stack_t *stack)
 
 void* AHR_StackPop(AHR_Stack_t *stack)
 {
+    assert(NULL != stack->data);
     if(stack->top <= 0)
     {
         return NULL;
@@ -34,6 +37,7 @@ void* AHR_StackPop(AHR_Stack_t *stack)
 
 bool AHR_StackPush(AHR_Stack_t *stack, void *arg)
 {
+    assert(NULL != stack->data);
     if(stack->top < stack->max_size)
     {
         stack->data[stack->top++] = arg;

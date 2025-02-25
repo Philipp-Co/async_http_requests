@@ -5,10 +5,9 @@
 #include <async_http_requests/request_processor.h>
 #include <async_http_requests/async_http_requests.h>
 #include <async_http_requests/stack.h>
+#include "external/inc/external/async_http_requests/ahr_curl.h"
 
-#include "curl/curl.h"
-#include "curl/multi.h"
-
+#include <assert.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <pthread.h>
@@ -76,7 +75,7 @@ struct AHR_Processor
     ///
     /// \brief  The curl multi Handle.
     ///
-    CURLM *handle;
+    AHR_CurlM_t handle;
     ///
     /// \brief  Generic Mutex to guard access to Datastructures.
     ///
@@ -140,7 +139,7 @@ AHR_Processor_t AHR_CreateProcessor(AHR_Logger_t logger)
     // The internal Datastructure sizes are dericved from AHR_NRESULTS.
     //
     AHR_Processor_t processor = malloc(sizeof(struct AHR_Processor));
-    processor->handle = curl_multi_init();
+    processor->handle = AHR_CurlMultiInit(); 
     //processor->request_list.head = NULL;
     
     // TODO: 
@@ -166,28 +165,42 @@ AHR_Processor_t AHR_CreateProcessor(AHR_Logger_t logger)
     atomic_store(&(processor->terminate), 0);
 
     processor->logger = logger;
+    processor->thread_id = 0;
 
-    if(0 == pthread_create(&(processor->thread_id), NULL, AHR_ProcessorThreadFunc, processor))
-        return processor;
-    free(processor);
-    return NULL;
+    return processor;
 }
 
 void AHR_DestroyProcessor(AHR_Processor_t *processor)
 {
     if(!*processor) return;
 
-    atomic_store(&((*processor)->terminate), 1);
-    void *result;
-    pthread_join((*processor)->thread_id, &result);
-
-    curl_multi_cleanup((*processor)->handle);
+    AHR_ProcessorStop(*processor);
+    AHR_CurlMultiCleanUp((*processor)->handle);
     
     free(*processor);
     *processor = NULL;
 }
 
-void* AHR_ProcessorGet(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data)
+bool AHR_ProcessorStart(AHR_Processor_t processor)
+{
+    if(0 == pthread_create(&(processor->thread_id), NULL, AHR_ProcessorThreadFunc, processor))
+    {
+        return true;
+    }
+    return false;
+}
+
+void AHR_ProcessorStop(AHR_Processor_t processor)
+{
+    if(processor->thread_id)
+    {
+        atomic_store(&(processor->terminate), 1);
+        void *result;
+        pthread_join(processor->thread_id, &result);
+    }
+}
+
+AHR_Id_t AHR_ProcessorGet(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data)
 {
     // TODO: Reuse Sockets...
     //  - Map: char* -> AHR_Result_t
@@ -210,11 +223,11 @@ void* AHR_ProcessorGet(AHR_Processor_t processor, const AHR_RequestData_t *data,
     AHR_StackPush(&processor->requests, result);
     pthread_mutex_unlock(&processor->mutex);
 
-    curl_multi_wakeup(processor->handle);
+    AHR_CurlMultiWeakUp(processor->handle);
     return AHR_RequestUUID(result->request);
 }
 
-void* AHR_ProcessorPost(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data)
+AHR_Id_t AHR_ProcessorPost(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data)
 {
     pthread_mutex_lock(&processor->mutex);
     AHR_Result_t result = AHR_StackPop(&processor->unused_results);
@@ -230,11 +243,11 @@ void* AHR_ProcessorPost(AHR_Processor_t processor, const AHR_RequestData_t *data
     AHR_StackPush(&processor->requests, result);
     
     pthread_mutex_unlock(&processor->mutex);
-    curl_multi_wakeup(processor->handle);
+    AHR_CurlMultiWeakUp(processor->handle);
     return AHR_RequestUUID(result->request);
 }
 
-void* AHR_ProcessorPut(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data)
+AHR_Id_t AHR_ProcessorPut(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data)
 {
     pthread_mutex_lock(&processor->mutex);
     AHR_Result_t result = AHR_StackPop(&processor->unused_results);
@@ -250,11 +263,11 @@ void* AHR_ProcessorPut(AHR_Processor_t processor, const AHR_RequestData_t *data,
     AHR_StackPush(&processor->requests, result);
     
     pthread_mutex_unlock(&processor->mutex);
-    curl_multi_wakeup(processor->handle);
+    AHR_CurlMultiWeakUp(processor->handle);
     return AHR_RequestUUID(result->request);
 }
 
-void* AHR_ProcessorDelete(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data)
+AHR_Id_t AHR_ProcessorDelete(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data)
 {
     pthread_mutex_lock(&processor->mutex);
     AHR_Result_t result = AHR_StackPop(&processor->unused_results);
@@ -264,13 +277,13 @@ void* AHR_ProcessorDelete(AHR_Processor_t processor, const AHR_RequestData_t *da
         return NULL;
     }
     AHR_RequestSetHeader(result->request, &data->header);
-    AHR_Get(result->request, data->url, result->response);
+    AHR_Delete(result->request, data->url, result->response);
     result->user_data = user_data;
     
     AHR_StackPush(&processor->requests, result);
     
     pthread_mutex_unlock(&processor->mutex);
-    curl_multi_wakeup(processor->handle);
+    AHR_CurlMultiWeakUp(processor->handle);
     return AHR_RequestUUID(result->request);
 }
 
@@ -399,16 +412,18 @@ static void AHR_HandleNewRequests(AHR_Processor_t processor)
             AHR_Result_t new = AHR_StackPop(&processor->requests);
             if(new)
             {
-                CURLMcode c = curl_multi_add_handle(
-                    processor->handle,
-                    AHR_RequestHandle(new->request)
-                );
-                if(CURLM_OK == c)
+                if(
+                    AHR_CurlMultiAddHandle(
+                        processor->handle,
+                        AHR_RequestHandle(new->request)
+                    )
+                )
                 {
                     AHR_RequestListAdd(&processor->result_list, new);
                 }
                 else
                 {
+                    printf("Heeer\n");
                     AHR_LogWarning(processor->logger, "Unable to give previously used Element back.");
                     AHR_DestroyResult(&new);
                 }
@@ -422,69 +437,62 @@ static void AHR_HandleNewRequests(AHR_Processor_t processor)
     }
 }
 
+static void AHR_CurlMultiInfoReadCallback(
+    void *arg,
+    AHR_Curl_t handle
+)
+{
+    AHR_Processor_t processor = (AHR_Processor_t)arg;
+    AHR_Result_t result = AHR_RequestListFind(
+        &processor->result_list,
+        handle
+    );
+     result->user_data.on_success(
+        result->user_data.data,
+        result->response
+     );
+     const bool r = AHR_RequestListRemove(
+        &processor->result_list,
+        AHR_RequestHandle(result->request)
+     );
+     AHR_CurlMultiRemoveHandle(
+        processor->handle,
+        handle
+     );
+     if(r)
+     {
+        //AHR_DestroyResult(&result);
+        pthread_mutex_lock(&processor->mutex);
+        AHR_StackPush(&processor->unused_results, result);
+        pthread_mutex_unlock(&processor->mutex);
+     }
+     else
+     {
+        AHR_LogError(processor->logger, "Unable to remove Element from Request List.");
+     }
+}
+
 static void AHR_ExecuteAndPoll(AHR_Processor_t processor)
 {
+    assert(NULL != processor);
     int num_fds = 0;
     int running_handles;
-    CURLMcode mc;
-    mc = curl_multi_perform(processor->handle, &running_handles);
-    if(CURLM_OK == mc)
+    if(
+        AHR_CurlMultiPerform(processor->handle, &running_handles)
+    )
     {
         if(running_handles <= 0)
         {
-            int msg_in_queue = 0;
-            CURLMsg *m;
-            do
-            {
-                m = curl_multi_info_read(processor->handle, &msg_in_queue);
-                if(m && (CURLMSG_DONE == m->msg))
-                {
-                    if(CURLE_OK != m->data.result)
-                    {
-                        //printf("Error %i for handler %p\n", m->data.result, m->easy_handle);
-                        AHR_LogInfo(processor->logger, "Error for CURL Handle.");
-                    }
-
-                    AHR_Result_t result = AHR_RequestListFind(
-                        &processor->result_list,
-                        m->easy_handle
-                    );
-                    if(result)
-                    {
-                        result->user_data.on_success(
-                            result->user_data.data,
-                            result->response
-                        );
-                        const bool r = AHR_RequestListRemove(
-                            &processor->result_list,
-                            AHR_RequestHandle(result->request)
-                        );
-                        if(r)
-                        {
-                            //AHR_DestroyResult(&result);
-                            pthread_mutex_lock(&processor->mutex);
-                            AHR_StackPush(&processor->unused_results, result);
-                            pthread_mutex_unlock(&processor->mutex);
-                        }
-                        else
-                        {
-                            printf("Unable to remove...\n");
-                        }
-                    }
-                    else
-                    {
-                        printf("handle not found!\n");
-                    }
-                    curl_multi_remove_handle(processor->handle, m->easy_handle);
-                }
-            }
-            while(m);
+            AHR_CurlMultiInfoReadData_t data = {
+                .data = processor,
+                .on_success=AHR_CurlMultiInfoReadCallback,
+                .on_error=AHR_CurlMultiInfoReadCallback
+            };
+            AHR_CurlMultiInfoRead(
+                processor->handle,
+                data
+            ); 
         }
-        mc = curl_multi_poll(processor->handle, NULL, 0, 1000, &num_fds); 
-        if(CURLM_OK != mc)
-        {
-            //printf("Error while polling!\n");
-            AHR_LogError(processor->logger, "Error while polling!");
-        }
+        AHR_CurlMultiPoll(processor->handle);
     }
 }

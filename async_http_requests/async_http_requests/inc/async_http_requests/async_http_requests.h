@@ -120,8 +120,12 @@ void AHR_ResponseSetLogger(AHR_HttpResponse_t response, AHR_Logger_t logger);
 ///             ...
 ///
 void AHR_RequestSetHeader(AHR_HttpRequest_t request, const AHR_Header_t *header);
+void AHR_RequestGetHeader(AHR_HttpRequest_t request, AHR_Header_t *header);
 ///
 /// \brief  Set the HTTP POST Method for this Object.
+///         This Function appends 1 additional Header.
+///         If there is no space for an additional Header, the last header if overridden.
+///         See AHR_HEADER_NMAX for the maximum number of possible Entries.
 ///
 void AHR_Post(AHR_HttpRequest_t request, const char *url, const char *body, AHR_HttpResponse_t response);
 ///

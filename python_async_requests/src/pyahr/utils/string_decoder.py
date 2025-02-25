@@ -1,4 +1,4 @@
-""""""
+"""Handler for decoding Strings."""
 #
 # ---------------------------------------------------------------------------------------------------------------------
 #
@@ -8,9 +8,10 @@ from abc import ABC, abstractmethod
 # ---------------------------------------------------------------------------------------------------------------------
 #
 class StringDecoder(ABC):
-
+    """Interface."""
     @abstractmethod
     def decode(self, data: bytes) -> str:
+        """Decode String."""
         pass
 
     pass
@@ -19,7 +20,10 @@ class StringDecoder(ABC):
 #
 
 class Utf8Decoder(StringDecoder):
-
+    """Konkreter Decoder fuer UTF-8.
+        
+    Decode to UTF-8 and replace unknown characters.
+    """
     def __init__(self):
         super().__init__()
         pass
