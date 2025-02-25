@@ -18,22 +18,32 @@ class Request:
         self.__ressource: str = ressource
         self.__header = {}
         self.__parameter = {}
+        self.__body = None
         pass
     
     def ressource(self) -> str:
         return self.__ressource
 
-    def set_parameter(self, params: Dict[str, str]) -> Self:
+    def set_header(self, header: Dict[str, str]) -> Self:
+        self.__header = header
         return self
 
-    def set_header(self, header: Dict[str, str]) -> Self:
-        return self
+    def header(self) -> Dict[str, str]:
+        return self.__header
 
     def set_body(self, data: Optional[str]) -> Self:
+        self.__body = data
         return self
 
+    def set_parameter(self, data: Dict[str, str]) -> Self:
+        self.__paramater = data
+        return self
+
+    def parameter(self) -> Dict:
+        return self.__parameter
+    
     def body(self) -> Optional[str]:
-        return None
+        return self.__body
     
     def to_repr(self) -> Any:
         return {

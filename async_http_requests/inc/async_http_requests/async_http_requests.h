@@ -119,23 +119,23 @@ void AHR_ResponseSetLogger(AHR_HttpResponse_t response, AHR_Logger_t logger);
 ///             AHR_RequestSetHeader(request, headers);
 ///             ...
 ///
-void AHR_RequestSetHeader(AHR_HttpRequest_t request, const char **headers);
+void AHR_RequestSetHeader(AHR_HttpRequest_t request, const AHR_Header_t *header);
 ///
 /// \brief  Set the HTTP POST Method for this Object.
 ///
-void AHR_Post(AHR_HttpRequest_t request, const char **headers, const char *body);
+void AHR_Post(AHR_HttpRequest_t request, const char *url, const char *body, AHR_HttpResponse_t response);
 ///
 /// \brief  Set the HTTP PUT Method for this Object.
 ///
-void AHR_Put(AHR_HttpRequest_t request, const char *body);
+void AHR_Put(AHR_HttpRequest_t request, const char *url, const char *body, AHR_HttpResponse_t response);
 ///
 /// \brief  Set the HTTP GET Method for this Object.
 ///
-void AHR_Get(AHR_HttpRequest_t request, const char *url, const char* const* headers, AHR_HttpResponse_t response);
+void AHR_Get(AHR_HttpRequest_t request, const char *url, AHR_HttpResponse_t response);
 ///
 /// \brief  Set the HTTP DELETE Method for this Object.
 ///
-void AHR_Delete(AHR_HttpRequest_t request);
+void AHR_Delete(AHR_HttpRequest_t request, const char *url, AHR_HttpResponse_t response);
 ///
 /// \brief  Get the HTTP Reponse Body of this Object.
 ///         The Pointer is valid until the Object is destroyed with a call to AHR_DestroyResponse(),

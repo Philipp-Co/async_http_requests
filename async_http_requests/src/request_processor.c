@@ -187,17 +187,13 @@ void AHR_DestroyProcessor(AHR_Processor_t *processor)
     *processor = NULL;
 }
 
-void* AHR_ProcessorGet(AHR_Processor_t processor, const char *url, AHR_UserData_t user_data)
+void* AHR_ProcessorGet(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data)
 {
-    const char* const headers[] ={
-        NULL
-    };
     // TODO: Reuse Sockets...
     //  - Map: char* -> AHR_Result_t
     //
     // TODO: Error Handling if no unused result ist present!
     //
-
     pthread_mutex_lock(&processor->mutex);
 
     AHR_Result_t result = NULL;
@@ -207,12 +203,73 @@ void* AHR_ProcessorGet(AHR_Processor_t processor, const char *url, AHR_UserData_
         AHR_LogWarning(processor->logger, "Warning: Unable to retrieve unused element.");
         return NULL;
     }
-    AHR_Get(result->request, url, headers, result->response);
+    AHR_RequestSetHeader(result->request, &data->header);
+    AHR_Get(result->request, data->url, result->response);
     result->user_data = user_data;
     
     AHR_StackPush(&processor->requests, result);
     pthread_mutex_unlock(&processor->mutex);
 
+    curl_multi_wakeup(processor->handle);
+    return AHR_RequestUUID(result->request);
+}
+
+void* AHR_ProcessorPost(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data)
+{
+    pthread_mutex_lock(&processor->mutex);
+    AHR_Result_t result = AHR_StackPop(&processor->unused_results);
+    if(!result)
+    {
+        AHR_LogWarning(processor->logger, "Warning: Unable to retrieve unused element.");
+        return NULL;
+    }
+    AHR_RequestSetHeader(result->request, &data->header);
+    AHR_Post(result->request, data->url, data->body, result->response);
+    result->user_data = user_data;
+    
+    AHR_StackPush(&processor->requests, result);
+    
+    pthread_mutex_unlock(&processor->mutex);
+    curl_multi_wakeup(processor->handle);
+    return AHR_RequestUUID(result->request);
+}
+
+void* AHR_ProcessorPut(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data)
+{
+    pthread_mutex_lock(&processor->mutex);
+    AHR_Result_t result = AHR_StackPop(&processor->unused_results);
+    if(!result)
+    {
+        AHR_LogWarning(processor->logger, "Warning: Unable to retrieve unused element.");
+        return NULL;
+    }
+    AHR_RequestSetHeader(result->request, &data->header);
+    AHR_Put(result->request, data->url, data->body, result->response);
+    result->user_data = user_data;
+    
+    AHR_StackPush(&processor->requests, result);
+    
+    pthread_mutex_unlock(&processor->mutex);
+    curl_multi_wakeup(processor->handle);
+    return AHR_RequestUUID(result->request);
+}
+
+void* AHR_ProcessorDelete(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data)
+{
+    pthread_mutex_lock(&processor->mutex);
+    AHR_Result_t result = AHR_StackPop(&processor->unused_results);
+    if(!result)
+    {
+        AHR_LogWarning(processor->logger, "Warning: Unable to retrieve unused element.");
+        return NULL;
+    }
+    AHR_RequestSetHeader(result->request, &data->header);
+    AHR_Get(result->request, data->url, result->response);
+    result->user_data = user_data;
+    
+    AHR_StackPush(&processor->requests, result);
+    
+    pthread_mutex_unlock(&processor->mutex);
     curl_multi_wakeup(processor->handle);
     return AHR_RequestUUID(result->request);
 }

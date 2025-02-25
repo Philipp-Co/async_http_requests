@@ -9,13 +9,14 @@ from typing_extensions import Self
 from abc import ABC, abstractmethod
 from logging import getLogger, Logger
 from typing import Optional, List
-from ctypes import cdll, byref, POINTER,pointer, c_void_p, c_char, CFUNCTYPE, c_char_p, Structure, py_object
+from ctypes import cdll, byref, POINTER,pointer, c_void_p, c_char, CFUNCTYPE, c_char_p, Structure, py_object, byref
 from ctypes import c_size_t
-from pyahr import _libahr, AHR_UserData, AHR_HeaderInfo, AHR_HeaderEntry
+from pyahr import _libahr, AHR_UserData, AHR_Header, AHR_HeaderEntry, AHR_RequestData 
 from .utils.string_decoder import StringDecoder, Utf8Decoder
 from copy import deepcopy
 from .interfaces.event_handler import EventHandler
 from json import dumps
+from logging import NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 #
 # ---------------------------------------------------------------------------------------------------------------------
@@ -51,22 +52,33 @@ class Processor:
     
     @CFUNCTYPE(c_void_p, py_object, c_char_p)
     def __log_info(self, msg):
-        print(msg)
         self.__logger.info(msg)
         pass
     
     @CFUNCTYPE(c_void_p, py_object, c_char_p)
     def __log_warning(self, msg):
-        print(msg)
         self.__logger.warning(msg)
         pass
     
     @CFUNCTYPE(c_void_p, py_object, c_char_p)
     def __log_error(self, msg):
-        print(msg)
         self.__logger.error(msg)
         pass
 
+    def __map_loglevel(self, loglevel: int) -> int:
+        """Convert the logging Modules Loglevel to a loglevel that libahr can understand."""
+        try:
+            return {
+                NOTSET: 0,
+                DEBUG: 0,
+                INFO: 0,
+                WARNING: 1,
+                ERROR: 2,
+                CRITICAL: 2,
+            }[loglevel]
+        except KeyError:
+            return 2
+    
     def __init__(self, url: str, event_handler: EventHandler, logger: Optional[Logger] = None):
         """Constructor.
         
@@ -84,6 +96,11 @@ class Processor:
             self.__log_warning,
             self.__log_error,
         )
+        _libahr.AHR_LoggerSetLoglevel(
+            self.__ahr_logger,
+            c_size_t(self.__map_loglevel(self.__logger.level)),
+        )
+
         self.__ahr_processor = _libahr.AHR_CreateProcessor(
             self.__ahr_logger
         )
@@ -134,7 +151,7 @@ class Processor:
         """
         response_id = _libahr.AHR_ResponseUUID(response)
         try:
-            info = AHR_HeaderInfo()
+            info = AHR_Header()
             _libahr.AHR_ResponseHeader(response, byref(info))
             self.__event_handler.handle(
                 Response(
@@ -162,16 +179,41 @@ class Processor:
                 )
             )
         pass
+    
+    def __create_request_data(self, request: Request) -> AHR_RequestData:
+        request_data = AHR_RequestData()
+        request_data.header = AHR_Header()
+        request_data.nheader = 0
+        request_data.url = f'{self.__url}/{request.ressource()}'.encode()
+        request_data.body = None
+        
+        i = 0
+        for header in request.header():
+            request_data.header.header[i].name = header.encode()
+            request_data.header.header[i].value = request.header()[header].encode()
+            i = i + 1
+        request_data.nheader = i
+        return request_data
+    
 
     def get(self, request: Request) -> Self:
-        """Create and execute a HTTP GET Request."""
+        """Create and execute a HTTP GET Request.
+
+        It is not allowed to append a Payload in the Requet Body. 
+
+        Example:
+            p.get(
+                Request(ressource='')
+            )
+        """
         #
         # deepcopy the request object.
         # the requestobject shall not be changed during the request-process.
         #
+        request_data: AHR_RequestData = self.__create_request_data(request)
         request_id = _libahr.AHR_ProcessorGet(
             self.__ahr_processor,
-            f'{self.__url}/{request.ressource()}'.encode(),
+            byref(request_data),
             AHR_UserData(
                 py_object(self),
                 self.__callback,
@@ -181,15 +223,69 @@ class Processor:
         return self
     
     def post(self, equest: Request) -> Self:
-        """Create and execute a HTTP GET Request."""
+        """Create and execute a HTTP POST Request.
+        
+        Post Requets are always done as Application/JSON with a payload in the Request Body. 
+        
+        Example:
+            p.post(
+                Request(
+                    ressource=''
+                ).set_body(
+                    dumps(
+                        {
+                            'foo': 'bar',
+                        }
+                    )
+                )
+            ) 
+        """
+        request_data: AHR_RequestData = self.__create_request_data(request)
+        request_id = _libahr.AHR_ProcessorPost(
+            self.__ahr_processor,
+            byref(request_data),
+            AHR_UserData(
+                py_object(self),
+                self.__callback,
+            )
+        )
+        self.__requests[request_id] = deepcopy(request)
         return self
 
     def put(self, request: Request) -> Self:
-        """Create and execute a HTTP GET Request."""
+        """Create and execute a HTTP PUT Request.
+
+        Example:
+            See post().
+        """
+        request_data: AHR_RequestData = self.__create_request_data(request)
+        request_id = _libahr.AHR_ProcessorPut(
+            self.__ahr_processor,
+            byref(request_data),
+            AHR_UserData(
+                py_object(self),
+                self.__callback,
+            )
+        )
+        self.__requests[request_id] = deepcopy(request)
         return self
 
     def delete(self, request: Request) -> Self:
-        """Create and execute a HTTP GET Request."""
+        """Create and execute a HTTP DELETE Request.
+        
+        Example:
+            See get().
+        """
+        request_data: AHR_RequestData = self.__create_request_data(request)
+        request_id = _libahr.AHR_ProcessorDelete(
+            self.__ahr_processor,
+            byref(request_data),
+            AHR_UserData(
+                py_object(self),
+                self.__callback,
+            )
+        )
+        self.__requests[request_id] = deepcopy(request)
         return self
     
     def number_of_pending_requests(self) -> int:

@@ -17,7 +17,7 @@ static void Callback(void *user_data, AHR_HttpResponse_t response)
 
 int main(int argc, char **argv)
 {
-    AHR_Processor_t processor = AHR_CreateProcessor();
+    AHR_Processor_t processor = AHR_CreateProcessor(NULL);
 
     AHR_UserData_t user_data = {
         .data = NULL,

@@ -32,7 +32,7 @@ struct AHR_HttpRequest
 
     AHR_Logger_t logger;
 
-    char **header;
+    AHR_Header_t header;
     AHR_Body_t body;
 };
 
@@ -52,6 +52,14 @@ static size_t AHR_WriteCallback(char *data, size_t size, size_t nmemb, void *cli
 static size_t AHR_HeaderCallback(char *buffer, size_t size, size_t nitems, void *userdata);
 
 static size_t AHR_ResponseAddHeader(AHR_HttpResponse_t response, const char* header, size_t nbytes);
+
+static void AHR_RequestPrepare(
+    long http_method,
+    AHR_HttpRequest_t request,
+    const char* url,
+    const char* body,
+    AHR_HttpResponse_t response
+);
 
 //
 // --------------------------------------------------------------------------------------------------------------------
@@ -135,43 +143,64 @@ AHR_Status_t AHR_MakeRequest(AHR_HttpRequest_t request, AHR_HttpResponse_t respo
     return AHR_OK;
 } 
 
-void AHR_Post(AHR_HttpRequest_t request, const char **headers, const char *body)
+void AHR_RequestSetHeader(AHR_HttpRequest_t request, const AHR_Header_t *header)
 {
-    curl_easy_setopt(request->handle, CURLOPT_POSTFIELDS, request->body.data);
-    curl_easy_setopt(request->handle, CURLOPT_POSTFIELDSIZE, request->body.nbytes);
-    curl_easy_setopt(request->handle, CURLOPT_POST, 1L);
-    
-    struct curl_slist *list = NULL;
-    list = curl_slist_append(list, "Content-Type: application/json");
-    list = curl_slist_append(list, "Accept: application/json");
-    for(size_t i=0;headers[i] != NULL; ++i)
-    {
-        list = curl_slist_append(list, headers[i]);
-    }
-    curl_easy_setopt(request->handle, CURLOPT_HTTPHEADER, list);
-    curl_slist_free_all(list);
-    
+    memcpy(&request->header, header, sizeof(AHR_Header_t));
+}
+
+void AHR_Post(AHR_HttpRequest_t request, const char *url, const char *body, AHR_HttpResponse_t response)
+{
+    //
+    // append content-type Header
+    //
+    memset(request->header.header[request->header.nheaders].name, '\0', AHR_HEADERENTRY_NAME_LEN);
+    memset(request->header.header[request->header.nheaders].value, '\0', AHR_HEADERENTRY_VALUE_LEN);
+    strcat(request->header.header[request->header.nheaders].name, "Content-Type");
+    strcat(request->header.header[request->header.nheaders].value, "application/json");
+
+    AHR_RequestPrepare(
+        CURLOPT_MIMEPOST,
+        request,
+        url,
+        body,
+        response
+    );
     AHR_MakeRequest(request, NULL);
 }
 
-void AHR_Get(AHR_HttpRequest_t request, const char *url, const char* const* headers, AHR_HttpResponse_t response)
+void AHR_Get(AHR_HttpRequest_t request, const char *url, AHR_HttpResponse_t response)
 {
-    memset(request->url, '\0', 4096);
-    memcpy(request->url, url, strlen(url));
-    // set http method
-    curl_easy_setopt(request->handle, CURLOPT_HTTPGET, 1L);
-    // prepare headers list
-    struct curl_slist *list = NULL;
-    for(size_t i=0;headers[i] != NULL; ++i)
-    {
-        list = curl_slist_append(list, headers[i]);
-    }
-    curl_easy_setopt(request->handle, CURLOPT_HTTPHEADER, list);
-    curl_slist_free_all(list);
-    // set userdata for callback
-    curl_easy_setopt(request->handle, CURLOPT_WRITEDATA, response);
-    curl_easy_setopt(request->handle, CURLOPT_HEADERDATA, response);
-    // make request
+    AHR_RequestPrepare(
+        CURLOPT_HTTPGET,
+        request,
+        url,
+        NULL,
+        response
+    );
+    AHR_MakeRequest(request, response);
+}
+
+void AHR_Put(AHR_HttpRequest_t request, const char *url, const char *body, AHR_HttpResponse_t response)
+{
+    AHR_RequestPrepare(
+        CURLOPT_UPLOAD,
+        request,
+        url,
+        body,
+        response
+    );
+    AHR_MakeRequest(request, response);
+}
+
+void AHR_Delete(AHR_HttpRequest_t request, const char *url, AHR_HttpResponse_t response)
+{
+    AHR_RequestPrepare(
+        CURLOPT_CUSTOMREQUEST,
+        request,
+        url,
+        NULL,
+        response
+    );
     AHR_MakeRequest(request, response);
 }
 
@@ -278,6 +307,43 @@ static size_t AHR_HeaderCallback(char *buffer, size_t size, size_t nitems, void 
     return size * nitems;
 }
 
+static void AHR_RequestPrepare(
+    long http_method,
+    AHR_HttpRequest_t request, 
+    const char* url, 
+    const char* body,
+    AHR_HttpResponse_t response
+)
+{
+    char header[AHR_HEADERENTRY_NAME_LEN + AHR_HEADERENTRY_VALUE_LEN + 1];
+
+    if(CURLOPT_CUSTOMREQUEST == http_method)
+    {
+        curl_easy_setopt(request->handle, CURLOPT_CUSTOMREQUEST, "DELETE");
+    }
+    else if(CURLOPT_MIMEPOST == http_method)
+    {
+        curl_easy_setopt(request->handle, CURLOPT_POSTFIELDS, body);
+        curl_easy_setopt(request->handle, CURLOPT_POSTFIELDSIZE, strlen(body));
+    }
+
+    memset(request->url, '\0', 4096);
+    memcpy(request->url, url, strlen(url));
+    // set http method
+    curl_easy_setopt(request->handle, http_method, 1L);
+    // prepare headers list
+    struct curl_slist *list = NULL;
+    for(size_t i=0;request->header.nheaders; ++i)
+    {
+        sprintf(header, "%s:%s", request->header.header[i].name, request->header.header[i].value);
+        list = curl_slist_append(list, header);
+    }
+    curl_easy_setopt(request->handle, CURLOPT_HTTPHEADER, list);
+    curl_slist_free_all(list);
+    // set userdata for callback
+    curl_easy_setopt(request->handle, CURLOPT_WRITEDATA, response);
+    curl_easy_setopt(request->handle, CURLOPT_HEADERDATA, response);
+}
 //
 // --------------------------------------------------------------------------------------------------------------------
 //
