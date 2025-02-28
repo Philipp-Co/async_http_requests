@@ -17,15 +17,14 @@ add_executable(
 
 set_source_files_properties(
     ${CMAKE_BINARY_DIR}/mocks/mock_logging.c
+    ${CMAKE_BINARY_DIR}/mocks/mock_ahr_curl.c
     PROPERTIES GENERATED TRUE
 )
 
 target_include_directories(
     test_request
     PUBLIC
-    #${CURL_INCLUDE_DIR}/curl/
     ${CMAKE_CURRENT_SOURCE_DIR}/../../async_http_requests/inc/
-    #${CMAKE_CURRENT_SOURCE_DIR}/../../async_http_requests/inc/async_http_requests/
     ${CMAKE_CURRENT_SOURCE_DIR}/inc/
     ${CMAKE_CURRENT_SOURCE_DIR}/../../external/Unity/src/
     ${CMAKE_CURRENT_SOURCE_DIR}/../../external/CMock/src/
@@ -44,12 +43,6 @@ target_link_libraries(
     PUBLIC
     unity
 )
-
-#add_custom_command(
-#    OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/mocks/logging.h ${CMAKE_CURRENT_SOURCE_DIR}/mocks/mock_logging.c ${CMAKE_CURRENT_SOURCE_DIR}/mock_logging.h
-#    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../../async_http_requests/inc/async_http_requests/logging.h ${CMAKE_CURRENT_SOURCE_DIR}/../../async_http_requests/src/logging.h
-#    COMMAND ruby ${CMAKE_CURRENT_SOURCE_DIR}/../../external/CMock/lib/cmock.rb -o${CMAKE_CURRENT_SOURCE_DIR}/config.yml ${CMAKE_CURRENT_SOURCE_DIR}/../../async_http_requests/inc/async_http_requests/logging.h
-#)
 
 add_custom_target(
     generate 
