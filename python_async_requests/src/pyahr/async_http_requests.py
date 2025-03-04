@@ -17,6 +17,36 @@ from copy import deepcopy
 from .interfaces.event_handler import EventHandler
 from json import dumps
 from logging import NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL
+from enum import IntEnum
+
+
+#
+# ---------------------------------------------------------------------------------------------------------------------
+#
+
+class HttpProcessorFlowError(Exception):
+    def __init__(self, status: AHR_ProcessorStatus, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__status : AHR_ProcessorStatus = status
+        pass
+    
+    def status(self) -> AHR_ProcessorStatus:
+        return self.__status
+    pass
+
+#
+# ---------------------------------------------------------------------------------------------------------------------
+#
+
+class AHR_ProcessorStatus(IntEnum):
+
+    AHR_PROC_OK = 0
+    AHR_PROC_OBJECT_BUSY = 1
+    AHR_PROC_UNKNOWN_OBJECT = 2
+    AHR_PROC_NOT_ENOUGH_MEMORY = 3
+    AHR_PROC_UNKNOWN_ERROR = 4
+    
+    pass
 
 #
 # ---------------------------------------------------------------------------------------------------------------------
@@ -47,7 +77,41 @@ class DefaultEventHandler(EventHandler):
 #
 
 class Processor:
-    """HTTP Request Processor."""
+    """HTTP Request Processor.
+
+    Example:
+        event_handler: DefaultEventHandler = DefaultEventHandler()
+        p: Processor = Processor(
+            url='http://www.google.de',
+            event_handler=event_handler,
+        )
+
+        #
+        # Request "http://www.google.de/some/ressource/?foor=bar"
+        #
+
+        # Create and prepare a Request.
+        request: Request = p.request().set_ressource(
+            'some/ressource/'
+        )set_header(
+            {'test': 'yes'}
+        ).set_query_parameter(
+            {'foo', 'bar'}
+        )
+        # Set HTTP Method for Request and make the Request.
+        p.get(
+            request
+        ).make_request(
+            request
+        )
+
+        ...
+
+        while True:
+            response: Optional[Response] = event_handler.next()
+            if response is not None:
+                print(response)
+    """
     
     @CFUNCTYPE(c_void_p, py_object, c_char_p)
     def __log_info(self, msg):
@@ -100,15 +164,23 @@ class Processor:
             c_size_t(self.__map_loglevel(self.__logger.level)),
         )
 
-        self.__ahr_processor = _libahr.AHR_CreateProcessor(
+        self.__ahr_processor: c_void_p = _libahr.AHR_CreateProcessor(
             self.__ahr_logger
         )
         # Response Body Decoder
         self.__string_decoder: StringDecoder = Utf8Decoder()
 
         self.__url: str = url[0:len(url)-1] if url.endswith('/') else url
-        self.__requests = {}
         self.__event_handler: EventHandler = event_handler
+
+        self.__requests = {}
+
+        self.__request_objects: Dict[int, Tuple[bool, Request]] = {}
+        for i in range(0, _libahr.AHR_ProcessorNumberOfRequestObjects(self.__ahr_processor)):
+            self.__request_objects[i] = (False, Request(i))
+
+        if not _libahr.AHR_ProcessorStart(self.__ahr_processor):
+            raise RuntimeError('Unable to start Http Request Processor!')
         pass
 
     def __reduce__ex(self):
@@ -124,6 +196,7 @@ class Processor:
         
         Destroyes created _libahr Objects.
         """
+        _libahr.AHR_ProcessorStop(self.__ahr_processor);
         _libahr.AHR_DestroyProcessor(byref(self.__ahr_processor))
         _libahr.AHR_DestroyLogger(byref(self.__ahr_logger))
         pass
@@ -180,11 +253,14 @@ class Processor:
         pass
     
     def __create_request_data(self, request: Request) -> AHR_RequestData:
+        """Create the AHR_RequestData Structure and fill it with the Requests contents."""
         request_data = AHR_RequestData()
         request_data.header = AHR_Header()
         request_data.nheader = 0
-        request_data.url = f'{self.__url}/{request.ressource()}'.encode()
-        request_data.body = None
+
+        url: str = f'{self.__url}/{request.ressource()}\0'
+        request_data.url = url.encode()
+        request_data.body = request.body().encode() if request.body() is not None else None
         
         i = 0
         for header in request.header():
@@ -194,6 +270,49 @@ class Processor:
         request_data.nheader = i
         return request_data
     
+    def request(self) -> Request:
+        """Get a Requestobject.
+
+        Raises:
+            MemoryError: If there are no more Objects available.
+        """
+        for item in self.__request_objects:
+            if not self.__request_objects[item][0]:
+                self.__request_objects[item] = (True, self.__request_objects[item][1])
+                return self.__request_objects[item][1]
+        raise MemoryError('Currently no more Requestobjects available.')
+
+    def prepare_request(self, request: Request) -> Self:
+        """Prepare Request Parameter for a Requestobject."""
+        request_data: AHR_RequestData = self.__create_request_data(request)
+        res: AHR_ProcessorStatus = AHR_ProcessorStatus(
+            _libahr.AHR_ProcessorPrepareRequest(
+                self.__ahr_processor,
+                request.handle(),
+                byref(request_data),
+                AHR_UserData(
+                    py_object(self),
+                    self.__callback,
+                ), 
+            )
+        )
+        if AHR_ProcessorStatus.AHR_PROC_OK != res:
+            raise HttpProcessorFlowError(status=res)
+        return self
+    
+    def make_request(self, request: Request) -> Self:
+        self.__requests[
+            _libahr.AHR_ProcessorTransactionId(self.__ahr_processor, request.handle())
+        ] = deepcopy(request)
+        res: AHR_ProcessorStatus = AHR_ProcessorStatus( 
+            _libahr.AHR_ProcessorMakeRequest(
+                self.__ahr_processor,
+                request.handle()
+            )
+        )
+        if AHR_ProcessorStatus.AHR_PROC_OK != res:
+            raise HttpProcessorFlowError(status=res)
+        return self
 
     def get(self, request: Request) -> Self:
         """Create and execute a HTTP GET Request.
@@ -205,23 +324,20 @@ class Processor:
                 Request(ressource='')
             )
         """
-        #
-        # deepcopy the request object.
-        # the requestobject shall not be changed during the request-process.
-        #
-        request_data: AHR_RequestData = self.__create_request_data(request)
-        request_id = _libahr.AHR_ProcessorGet(
-            self.__ahr_processor,
-            byref(request_data),
-            AHR_UserData(
-                py_object(self),
-                self.__callback,
+        #self.__requests[
+        #    _libahr.AHR_ProcessorTransactionId(self.__ahr_processor, request.handle())
+        #] = deepcopy(request)
+        status: AHR_ProcessorStatus = AHR_ProcessorStatus(
+            _libahr.AHR_ProcessorGet(
+                self.__ahr_processor,
+                request.handle(),
             )
         )
-        self.__requests[request_id] = deepcopy(request)
+        if AHR_ProcessorStatus.AHR_PROC_OK != status:
+            raise HttpProcessorFlowError(status=res)
         return self
     
-    def post(self, equest: Request) -> Self:
+    def post(self, request: Request) -> Self:
         """Create and execute a HTTP POST Request.
         
         Post Requets are always done as Application/JSON with a payload in the Request Body. 

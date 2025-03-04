@@ -12,7 +12,6 @@
 // --------------------------------------------------------------------------------------------------------------------
 //
 
-typedef void* AHR_Curl_t;
 typedef size_t (*AHR_WriteCallback_t)(char *data, size_t size, size_t nmemb, void *clientp);
 typedef size_t (*AHR_HeaderCallback_t)(char *buffer, size_t size, size_t nitems, void *userdata);
 
@@ -28,7 +27,7 @@ AHR_Curl_t AHR_CurlEasyInit(
 );
 void AHR_CurlEasyCleanUp(AHR_Curl_t handle);
 
-void AHR_CurlSetHeader(AHR_Curl_t handle, AHR_Header_t *header);
+void AHR_CurlSetHeader(AHR_Curl_t *handle, const AHR_Header_t *header);
 void AHR_CurlEasySetUrl(AHR_Curl_t handle, const char *url);
 
 bool AHR_CurlEasyPerform(AHR_Curl_t handle);

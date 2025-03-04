@@ -11,7 +11,6 @@
 #include <assert.h>
 
 #include <curl/curl.h>
-//#include <external/async_http_requests/ahr_curl.h>
 #include "external/inc/external/async_http_requests/ahr_curl.h"
 
 //
@@ -35,8 +34,9 @@ struct AHR_HttpRequest
 
     AHR_Logger_t logger;
 
-    AHR_Header_t header;
     AHR_Body_t body;
+
+    struct curl_slist *http_header;
 };
 
 struct AHR_HttpResponse
@@ -60,7 +60,7 @@ static size_t AHR_ResponseAddHeader(AHR_HttpResponse_t response, const char* hea
 // --------------------------------------------------------------------------------------------------------------------
 //
 
-void* AHR_RequestHandle(AHR_HttpRequest_t request)
+AHR_Curl_t AHR_RequestHandle(AHR_HttpRequest_t request)
 {
     return request->handle;
 }
@@ -123,19 +123,25 @@ void AHR_DestroyResponse(AHR_HttpResponse_t *response)
 
 void AHR_DestroyRequest(AHR_HttpRequest_t *request)
 {
+    if((*request)->http_header)
+    {
+        curl_slist_free_all((*request)->http_header);
+    }
     free((*request)->url);
     free((*request)->body.data);
 
     AHR_CurlEasyCleanUp((*request)->handle);
     (*request)->url = NULL;
-    (*request)->handle = NULL;
+    (*request)->handle.handle = NULL;
     *request = NULL;
 }
 
 AHR_Status_t AHR_MakeRequest(AHR_HttpRequest_t request, AHR_HttpResponse_t response) 
 {
+    assert(NULL != request);
+    assert(NULL != response);
+    assert(NULL != request->url);
     AHR_CurlEasySetUrl(request->handle, request->url);
-    AHR_CurlEasyPerform(request->handle);
     response->request = request;
 
     return AHR_OK;
@@ -143,12 +149,12 @@ AHR_Status_t AHR_MakeRequest(AHR_HttpRequest_t request, AHR_HttpResponse_t respo
 
 void AHR_RequestSetHeader(AHR_HttpRequest_t request, const AHR_Header_t *header)
 {
-    memcpy(&request->header, header, sizeof(AHR_Header_t));
+    AHR_CurlSetHeader(&request->handle, header);
 }
 
 void AHR_RequestGetHeader(AHR_HttpRequest_t request, AHR_Header_t *header)
 {
-    memcpy(header, &request->header, sizeof(AHR_Header_t));
+    // TODO calculate header!
 }
 
 void AHR_Post(AHR_HttpRequest_t request, const char *url, const char *body, AHR_HttpResponse_t response)
@@ -156,25 +162,19 @@ void AHR_Post(AHR_HttpRequest_t request, const char *url, const char *body, AHR_
     assert(NULL != request);
     assert(NULL != response);
     assert(NULL != url);
+    assert(NULL != request->handle.handle);
     //
     // append content-type Header
     //
     // TODO: Check  if additional Headers are possible...
-    if(request->header.nheaders >= AHR_HEADER_NMAX)
-    {
-        request->header.nheaders = AHR_HEADER_NMAX - 1;
-    }
-    static const char *content_type = "Content-Type\0";
-    static const char *content_type_value = "application/json\0";
-    const size_t header_idx = request->header.nheaders;
-    memcpy(request->header.header[header_idx].name, content_type, strlen(content_type) + 1);
-    memcpy(request->header.header[header_idx].value, content_type_value, strlen(content_type_value) + 1);
-    request->header.nheaders++;
-    
+    request->http_header = curl_slist_append(request->http_header, "Content-Type: application/json"); 
+    request->http_header = curl_slist_append(request->http_header, "Accept: application/json"); 
+    request->http_header = curl_slist_append(request->http_header, "charset: utf-8"); 
+
     memset(request->url, '\0', 4096);
     memcpy(request->url, url, strlen(url));
     
-    AHR_CurlSetHeader(request->handle, &request->header);
+    AHR_CurlSetHeader(&request->handle, NULL);
     AHR_CurlSetHttpMethodPost(request->handle, body);
     AHR_CurlSetCallbackUserData(
         request->handle,
@@ -186,10 +186,14 @@ void AHR_Post(AHR_HttpRequest_t request, const char *url, const char *body, AHR_
 
 void AHR_Get(AHR_HttpRequest_t request, const char *url, AHR_HttpResponse_t response)
 {
+    assert(request != NULL);
+    assert(response != NULL);
+    assert(url != NULL);
+
     memset(request->url, '\0', 4096);
     memcpy(request->url, url, strlen(url));
     AHR_CurlSetHttpMethodGet(request->handle);
-    AHR_CurlSetHeader(request->handle, &request->header);
+    //AHR_CurlSetHeader(&request->handle, NULL);
     AHR_CurlSetCallbackUserData(
         request->handle,
         response,
@@ -203,7 +207,7 @@ void AHR_Put(AHR_HttpRequest_t request, const char *url, const char *body, AHR_H
     memset(request->url, '\0', 4096);
     memcpy(request->url, url, strlen(url));
     AHR_CurlSetHttpMethodPut(request->handle, body);
-    AHR_CurlSetHeader(request->handle, &request->header);
+    AHR_CurlSetHeader(&request->handle, NULL);
     AHR_CurlSetCallbackUserData(
         request->handle,
         response,
@@ -217,7 +221,7 @@ void AHR_Delete(AHR_HttpRequest_t request, const char *url, AHR_HttpResponse_t r
     memset(request->url, '\0', 4096);
     memcpy(request->url, url, strlen(url));
     AHR_CurlSetHttpMethodDelete(request->handle);
-    AHR_CurlSetHeader(request->handle, &request->header);
+    AHR_CurlSetHeader(&request->handle, NULL);
     AHR_CurlSetCallbackUserData(
         request->handle,
         response,
@@ -228,7 +232,8 @@ void AHR_Delete(AHR_HttpRequest_t request, const char *url, AHR_HttpResponse_t r
 
 const char* AHR_ResponseBody(const AHR_HttpResponse_t response)
 {
-    return response->body.data;
+    static const char *emptystr = "";
+    return response->body.data ? response->body.data : emptystr;
 }
 
 void AHR_ResponseHeader(const AHR_HttpResponse_t response, AHR_Header_t *info)
@@ -270,6 +275,7 @@ static size_t AHR_WriteCallback(char *data, size_t size, size_t nmemb, void *cli
     const size_t nbytes = size * nmemb; 
     if((nbytes + response->body.nbytes - 1) >= response->body.maxbytes)
     {
+        printf("Write ERROR in AHR_WriteCallback!\n");
         return AHR_CurlWriteError();
     }
     // copy to userbuffer

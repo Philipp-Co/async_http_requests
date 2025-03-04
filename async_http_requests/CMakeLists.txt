@@ -38,6 +38,7 @@ add_library(
     async_http_requests/src/stack.c
     async_http_requests/src/logging.c
     async_http_requests/src/external/src/ahr_curl.c
+    async_http_requests/src/private/src/result.c
 )
 
 #
@@ -78,6 +79,7 @@ target_include_directories(
     PUBLIC
     async_http_requests/inc/
     async_http_requests/src/external/inc/
+    async_http_requests/src/private/inc/
     external/curl/include/
 )
 

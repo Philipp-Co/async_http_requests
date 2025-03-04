@@ -4,7 +4,7 @@ _is_initialized: bool = False
 
 if not _is_initialized:
 
-    from ctypes import cdll, byref, POINTER,pointer, c_void_p, c_char, CFUNCTYPE, c_char_p, c_long, Structure, py_object, c_size_t
+    from ctypes import cdll, byref, POINTER,pointer, c_void_p, c_char, CFUNCTYPE, c_char_p, c_long, Structure, py_object, c_size_t, c_bool, c_int
     from os import environ
     
     lib_path: str = environ.get('LIB_AHR_PATH', 'libahr.dylib')
@@ -66,6 +66,13 @@ if not _is_initialized:
     #
     _libahr.AHR_CreateProcessor.argtypes = [c_void_p]
     _libahr.AHR_CreateProcessor.restype = POINTER(c_void_p)
+
+    _libahr.AHR_ProcessorStart.argtypes = [c_void_p]
+    _libahr.AHR_ProcessorStart.restype = c_bool 
+
+    _libahr.AHR_ProcessorStop.argtypes = [c_void_p]
+    # _libahr.AHR:ProcessorStop.restype = 
+
     #
     # =====================================================
     #
@@ -84,9 +91,32 @@ if not _is_initialized:
             ('body', c_char_p),
             ('log_level', c_size_t),
         ]
+    #
+    # =====================================================
+    #
+   
+    _libahr.AHR_ProcessorTransactionId.argtyps = [c_void_p, c_size_t]
+    _libahr.AHR_ProcessorTransactionId.restype = c_void_p
 
-    _libahr.AHR_ProcessorGet.argtypes = [c_void_p, c_void_p, AHR_UserData]
-    _libahr.AHR_ProcessorGet.restype = c_void_p
+    _libahr.AHR_ProcessorNumberOfRequestObjects.argtypes = [c_void_p]
+    _libahr.AHR_ProcessorNumberOfRequestObjects.restype = c_size_t
+
+    _libahr.AHR_ProcessorPrepareRequest.argtypes = [
+        c_void_p,
+        c_size_t,
+        POINTER(AHR_RequestData),
+        AHR_UserData
+    ]
+    _libahr.AHR_ProcessorPrepareRequest.restype = c_int
+
+    #
+    # =====================================================
+    #
+    _libahr.AHR_ProcessorMakeRequest.argtypes = [c_void_p, c_size_t]
+    _libahr.AHR_ProcessorMakeRequest.restype = c_int
+
+    _libahr.AHR_ProcessorGet.argtypes = [c_void_p, c_size_t]
+    _libahr.AHR_ProcessorGet.restype = c_int
     
     _libahr.AHR_ProcessorPost.argtypes = [c_void_p, c_void_p, AHR_UserData]
     _libahr.AHR_ProcessorPost.restype = c_void_p

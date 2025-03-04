@@ -7,17 +7,49 @@ logger: Logger = getLogger('mylogger')
 logger.setLevel('INFO')
 
 event_handler: DefaultEventHandler = DefaultEventHandler()
-p: Processor = Processor(url='www.google.de', event_handler=event_handler, logger=logger)
-p.get(
-    Request(ressource='').set_header(
-        {'Connection': 'keep-alive'}
+url: str = 'http://localhost:8000/'
+url1: str = 'http://192.168.0.1'
+urltg = url
+p: Processor = Processor(url=urltg, event_handler=event_handler, logger=logger)
+
+from time import monotonic_ns
+
+k = 10
+request_objects = []
+for i in range(0, k):
+    request: Request = p.request()
+    request.set_ressource('').set_query_parameter({'test1': 'mr.x'}).set_header({'header1': 'test'})
+    print(f'Request from processor {request.ressource()}')
+    p.prepare_request(
+        request
     )
+    print(
+        p.get(request).name
+    )
+    request_objects.append(request)
+
+print('--------------------------')
+start = monotonic_ns()
+for i in range(0, k):
+    p.make_request(request_objects[i])
+
+results = []
+while len(results) != k:
+    r = event_handler.next()
+    if r is not None:
+        results.append(
+            r
+        )
+end = monotonic_ns()
+print('--------------------------')
+print(f'DT: {(end - start) / (1000 * 1000 * 1000)}')
+print(
+    [result.status_code() for result in results]
 )
 
-sleep(2)
-r: Optional[Response] = event_handler.next()
-if r is not None:
-    print(
-        r
-    )
-
+from requests import get
+start = monotonic_ns()
+for i in range(0, k):
+    get(urltg)
+end = monotonic_ns()
+print(f'DT: {(end - start) / (1000 * 1000 * 1000)}')

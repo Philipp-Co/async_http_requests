@@ -7,6 +7,7 @@ from typing_extensions import Self
 from json import dumps
 from typing import Dict, Optional, Any
 from uuid import uuid4, UUID
+from ctypes import c_size_t, c_void_p
 
 #
 # ---------------------------------------------------------------------------------------------------------------------
@@ -14,15 +15,29 @@ from uuid import uuid4, UUID
 
 class Request:
 
-    def __init__(self, ressource: str):
-        self.__ressource: str = ressource
+    def __init__(self, obj: c_size_t):
+        self.__ressource: str = ''
         self.__header = {}
         self.__parameter = {}
         self.__body = None
+        self.__handle: c_size_t = obj
         pass
+
+    def handle(self) -> c_size_t:
+        return self.__handle
     
+    def set_ressource(self, ressource: str) -> Self:
+        self.__ressource = ressource
+        return self
+
     def ressource(self) -> str:
+        if len(self.__parameter) > 0:
+            return self.__ressource + '?' + '&'.join([f'{parameter}={self.__parameter[parameter]}' for parameter in self.__parameter])
         return self.__ressource
+
+    def set_query_parameter(self, parameter: Dict[str, str]) -> Self:
+        self.__parameter = parameter
+        return self
 
     def set_header(self, header: Dict[str, str]) -> Self:
         self.__header = header
@@ -35,18 +50,15 @@ class Request:
         self.__body = data
         return self
 
-    def set_parameter(self, data: Dict[str, str]) -> Self:
-        self.__paramater = data
-        return self
-
-    def parameter(self) -> Dict:
+    def query_parameter(self) -> Dict:
         return self.__parameter
     
     def body(self) -> Optional[str]:
         return self.__body
-    
+
     def to_repr(self) -> Any:
         return {
+            'handle': self.__handle,
             'ressource': self.__ressource,
             'header': self.__header,
             'parameter': self.__parameter,

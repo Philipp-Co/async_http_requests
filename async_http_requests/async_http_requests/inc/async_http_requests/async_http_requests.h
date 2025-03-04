@@ -27,37 +27,16 @@
 #include <stdbool.h>
 
 #include <async_http_requests/logging.h>
+#include <async_http_requests/types.h>
 
 //
 // --------------------------------------------------------------------------------------------------------------------
 //
 
-#define AHR_HEADERENTRY_NAME_LEN 256
-#define AHR_HEADERENTRY_VALUE_LEN (4096 - (AHR_HEADERENTRY_NAME_LEN))
-
-#define AHR_HEADER_NMAX 256
 
 //
 // --------------------------------------------------------------------------------------------------------------------
 //
-
-typedef struct
-{
-    char name[AHR_HEADERENTRY_NAME_LEN];
-    char value[AHR_HEADERENTRY_VALUE_LEN];
-} AHR_HeaderEntry_t;
-
-typedef struct 
-{
-    AHR_HeaderEntry_t header[AHR_HEADER_NMAX];    
-    size_t nheaders;
-} AHR_Header_t;
-
-struct AHR_HttpRequest;
-typedef struct AHR_HttpRequest* AHR_HttpRequest_t;
-
-struct AHR_HttpResponse;
-typedef struct AHR_HttpResponse* AHR_HttpResponse_t;
 
 typedef enum
 {
@@ -70,7 +49,7 @@ typedef enum
 ///
 /// \brief  Getter for an internal Handle.
 ///
-void* AHR_RequestHandle(AHR_HttpRequest_t request);
+AHR_Curl_t AHR_RequestHandle(AHR_HttpRequest_t request);
 ///
 /// \brief  Create a Response Object.
 ///         Each Object has to be destroyed with a call to AHR_DestroyResponse.
