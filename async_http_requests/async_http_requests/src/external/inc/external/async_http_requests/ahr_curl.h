@@ -41,7 +41,7 @@ void AHR_CurlSetCallbackUserData(
 
 void AHR_CurlSetHttpMethodGet(AHR_Curl_t handle);
 void AHR_CurlSetHttpMethodPost(AHR_Curl_t handle, const char *body);
-void AHR_CurlSetHttpMethodPut(AHR_Curl_t handle, const char *body);
+void AHR_CurlSetHttpMethodPut(AHR_Curl_t *handle, const char *body);
 void AHR_CurlSetHttpMethodDelete(AHR_Curl_t handle);
 
 int AHR_CurlWriteError(void);
@@ -51,12 +51,13 @@ int AHR_CurlReadError(void);
 // --------------------------------------------------------------------------------------------------------------------
 //
 
-typedef void (*AHR_CurlMultiInfoReadCallback_t)(void *arg, AHR_Curl_t handle);
+typedef void (*AHR_CurlMultiInfoReadSuccessCallback_t)(void *arg, AHR_Curl_t handle);
+typedef void (*AHR_CurlMultiInfoReadErrorCallback_t)(void *arg, AHR_Curl_t handle, size_t error_code);
 typedef struct
 {
     void *data;
-    AHR_CurlMultiInfoReadCallback_t on_success;
-    AHR_CurlMultiInfoReadCallback_t on_error;
+    AHR_CurlMultiInfoReadSuccessCallback_t on_success;
+    AHR_CurlMultiInfoReadErrorCallback_t on_error;
 } AHR_CurlMultiInfoReadData_t;
 
 bool AHR_CurlMultiAddHandle(AHR_CurlM_t handle, AHR_Curl_t ehandle);

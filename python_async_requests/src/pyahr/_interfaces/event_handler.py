@@ -4,19 +4,24 @@
 #
 
 from abc import ABC, abstractmethod
-from .._transactions.response import Response
+
+from .._transactions.response import AHR_Response
 
 #
 # ---------------------------------------------------------------------------------------------------------------------
 #
 
-class EventHandler(ABC):
-   
+
+class AHR_EventHandler(ABC):
+    """Interfacedefinition for an Eventhandler."""
+
     @abstractmethod
-    def handle(self, response: Response) -> None:
+    def handle(self, response: AHR_Response) -> None:
+        """This Function will be called for each received Response."""
         pass
 
     pass
+
 
 #
 # ---------------------------------------------------------------------------------------------------------------------

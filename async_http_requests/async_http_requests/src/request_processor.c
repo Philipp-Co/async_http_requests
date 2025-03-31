@@ -1,3 +1,10 @@
+///
+/// \brief  Http Processor.
+/// \architectural decisions    Here are some Decisions listed.
+///     1. No public Access to internal Structures.
+///     2. The Http Processor does not use dynamic Memory Allocation after Initialization. 
+///     3. No Infologs for Debugging, Log all Errors
+///         
 
 //
 // --------------------------------------------------------------------------------------------------------------------
@@ -7,6 +14,7 @@
 #include <async_http_requests/stack.h>
 #include "external/inc/external/async_http_requests/ahr_curl.h"
 #include <async_http_requests/private/result.h>
+#include <async_http_requests/private/ahr_mutex.h>
 
 #include <assert.h>
 #include <unistd.h>
@@ -24,7 +32,6 @@
 ///
 /// \brief  Defines the Number of Transaktionobjects created initially.
 ///
-#define AHR_NRESULTS 10
 
 #define AHR_PROCESSOR_MAX_URL_LEN (4096-1)
 #define AHR_PROCESSOR_MAX_BODY_SIZE ((4096 * 16)-1)
@@ -55,6 +62,7 @@ typedef struct
 
 ///
 /// \brief  Key Structure. This holds the state of the modules.
+///         
 ///
 struct AHR_Processor
 {
@@ -74,7 +82,7 @@ struct AHR_Processor
     ///
     /// \brief  Generic Mutex to guard access to Datastructures.
     ///
-    pthread_mutex_t mutex;
+    AHR_Mutex_t mutex;
 
     ///
     /// \brief Object which are requested to execute. 
@@ -120,28 +128,37 @@ static void AHR_ExecuteAndPoll(AHR_Processor_t processor);
 /// \brief  This is the internal Function which executes the Eventloop inside a Thread.
 ///
 static void* AHR_ProcessorThreadFunc(void *arg);
+
+static AHR_ProcessorStatus_t AHR_ProcessorPrepareRequest(
+    AHR_Processor_t processor,
+    size_t object, 
+    const AHR_RequestData_t *request_data,
+    AHR_UserData_t data
+);
 //
 // --------------------------------------------------------------------------------------------------------------------
 //
 
-AHR_Processor_t AHR_CreateProcessor(AHR_Logger_t logger)
+AHR_Processor_t AHR_CreateProcessor(size_t max_objects, AHR_Logger_t logger)
 {
     //
     // Create a AHR_Processor_t handle.
-    // The internal Datastructure sizes are dericved from AHR_NRESULTS.
     //
-    
+    if(max_objects > 25)
+    {
+        return NULL;
+    }
+
     curl_global_init(CURL_GLOBAL_DEFAULT);
-    //
+    
     AHR_Processor_t processor = malloc(sizeof(struct AHR_Processor));
     processor->handle = AHR_CurlMultiInit(); 
-    //processor->request_list.head = NULL;
     
     // TODO: 
     //  - Malloc only on init -> pre-create all Resultobjects
     //  - Make url reconfigurable in request objects
     //  - Make Callback reconfigurable in response objects
-    processor->result_store = AHR_CreateResultStore(AHR_NRESULTS);
+    processor->result_store = AHR_CreateResultStore(max_objects);
     for(size_t i = 0;i<AHR_ResultStoreSize(&processor->result_store); ++i)
     {
         AHR_Result_t *result = AHR_ResultStoreGetResult(&processor->result_store, i);
@@ -152,14 +169,15 @@ AHR_Processor_t AHR_CreateProcessor(AHR_Logger_t logger)
         result->response = AHR_CreateResponse();
     }
     //
-    processor->requests = AHR_CraeteStack(AHR_NRESULTS);
+    processor->requests = AHR_CraeteStack(max_objects);
     processor->result_list.head = NULL;
     
-    pthread_mutex_init(&(processor->mutex), NULL);
+    //pthread_mutex_init(&(processor->mutex), NULL);
+    processor->mutex = AHR_CreateMutex();
     atomic_store(&(processor->terminate), 0);
 
     processor->logger = logger;
-    processor->thread_id = NULL;
+    processor->thread_id = (pthread_t)NULL;
 
     return processor;
 }
@@ -179,7 +197,7 @@ void AHR_DestroyProcessor(AHR_Processor_t *processor)
 bool AHR_ProcessorStart(AHR_Processor_t processor)
 {
     // ----
-    if(NULL != processor->thread_id)
+    if((pthread_t)NULL != processor->thread_id)
     {
         AHR_LogWarning(
             processor->logger, 
@@ -205,7 +223,7 @@ void AHR_ProcessorStop(AHR_Processor_t processor)
         atomic_store(&(processor->terminate), 1);
         void *result;
         pthread_join(processor->thread_id, &result);
-        processor->thread_id = NULL;
+        processor->thread_id = (pthread_t)NULL;
     }
 }
 
@@ -236,19 +254,7 @@ AHR_ProcessorStatus_t AHR_ProcessorPrepareRequest(
         &processor->result_store,
         object
     );
-    //
-    // Error handling...
-    //
     // ---- 
-    if(!result)
-    {
-        return AHR_PROC_UNKNOWN_OBJECT;
-    }
-    // ---- 
-    if(!AHR_ProcessorTryLockResult(result))
-    {
-        return AHR_PROC_OBJECT_BUSY;
-    }
     // ---- 
     //
     // Processing...
@@ -266,15 +272,14 @@ AHR_ProcessorStatus_t AHR_ProcessorPrepareRequest(
     memcpy(result->request_data.url, request_data->url, AHR_PROCESSOR_MAX_URL_LEN);
 
     result->user_data = data;
-
-    AHR_ProcessorUnlockResult(result);
     return AHR_PROC_OK; 
 }
 
 AHR_ProcessorStatus_t AHR_ProcessorMakeRequest(AHR_Processor_t processor, size_t object)
 {
     AHR_ProcessorStatus_t retval = AHR_PROC_OK;
-    pthread_mutex_lock(&processor->mutex);
+    //pthread_mutex_lock(&processor->mutex);
+    AHR_MutexLock(processor->mutex);
     AHR_Result_t *result = AHR_ResultStoreGetResult(
         &processor->result_store,
         object
@@ -299,18 +304,25 @@ AHR_ProcessorStatus_t AHR_ProcessorMakeRequest(AHR_Processor_t processor, size_t
     //
     // Process...
     //
+    AHR_ResponseReset(result->response);
     AHR_StackPush(&processor->requests, result);
     AHR_CurlMultiWeakUp(processor->handle);
 
 end:
-    pthread_mutex_unlock(&processor->mutex);
+    //pthread_mutex_unlock(&processor->mutex);
+    AHR_MutexUnlock(processor->mutex);
     return retval;
 }
 
-AHR_ProcessorStatus_t AHR_ProcessorGet(AHR_Processor_t processor, size_t object)
+AHR_ProcessorStatus_t AHR_ProcessorGet(
+    AHR_Processor_t processor, 
+    size_t object,
+    const AHR_RequestData_t *request_data,
+    AHR_UserData_t data
+)
 {
     AHR_ProcessorStatus_t status = AHR_PROC_OK;
-    pthread_mutex_lock(&processor->mutex);
+    AHR_MutexLock(processor->mutex);
 
     AHR_Result_t *result = AHR_ResultStoreGetResult(
         &processor->result_store, object
@@ -342,101 +354,193 @@ AHR_ProcessorStatus_t AHR_ProcessorGet(AHR_Processor_t processor, size_t object)
     //
     // Process...
     //
+    AHR_ProcessorPrepareRequest(
+        processor,
+        object,
+        request_data,
+        data
+    );
     AHR_Get(result->request, result->request_data.url, result->response);
     AHR_ProcessorUnlockResult(result);
 end:
-    pthread_mutex_unlock(&processor->mutex);
+    //pthread_mutex_unlock(&processor->mutex);
+    AHR_MutexUnlock(processor->mutex);
     return status;
 }
 
-AHR_Id_t AHR_ProcessorPost(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data)
+AHR_ProcessorStatus_t AHR_ProcessorPost(
+    AHR_Processor_t processor, 
+    size_t object,
+    const AHR_RequestData_t *data, 
+    AHR_UserData_t user_data
+)
 {
-    /*
-    assert(NULL != processor);
-    assert(NULL != data);
+    printf("Start POST Request...\n");
+    AHR_ProcessorStatus_t status = AHR_PROC_OK;
+    AHR_MutexLock(processor->mutex);
 
-    pthread_mutex_lock(&processor->mutex);
-    AHR_Result_t result = AHR_StackPop(&processor->unused_results);
+    AHR_Result_t *result = AHR_ResultStoreGetResult(
+        &processor->result_store, object
+    );
+    //
+    // Error Handling...
+    //
+    // ---- 
     if(!result)
     {
-        AHR_LogWarning(processor->logger, "Warning: Unable to retrieve unused element.");
-        return NULL;
+        AHR_LogWarning(
+            processor->logger,
+            "Warning: Unable to retrieve unused element."
+        );
+        printf("No Reslt..\n");
+        status = AHR_PROC_UNKNOWN_OBJECT;
+        goto end;
     }
-
-    AHR_RequestSetHeader(result->request, &data->header);
-    AHR_Post(result->request, data->url, data->body, result->response);
-    result->user_data = user_data;
-    
-    AHR_StackPush(&processor->requests, result);
-    
-    pthread_mutex_unlock(&processor->mutex);
-
-    AHR_CurlMultiWeakUp(processor->handle);
-    return AHR_RequestUUID(result->request);
-    */
-    return NULL;
+    // ---- 
+    if(!AHR_ProcessorTryLockResult(result))
+    {
+        AHR_LogInfo(
+            processor->logger,
+            "Sorry the Object you are requesting is busy."
+        );
+        printf("locked..\n");
+        status = AHR_PROC_OBJECT_BUSY;
+        goto end;
+    }
+    // ---- 
+    //
+    // Process...
+    //
+    AHR_ProcessorPrepareRequest(
+        processor,
+        object,
+        data,
+        user_data
+    );
+    AHR_Post(result->request, result->request_data.url, result->request_data.body, result->response);
+    AHR_ProcessorUnlockResult(result);
+end:
+    //pthread_mutex_unlock(&processor->mutex);
+    AHR_MutexUnlock(processor->mutex);
+    printf("POST!!!\n");
+    printf("--> URL: %s\n", result->request_data.url);
+    return status;
 }
 
-AHR_Id_t AHR_ProcessorPut(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data)
+AHR_ProcessorStatus_t AHR_ProcessorPut(
+    AHR_Processor_t processor, 
+    size_t object,
+    const AHR_RequestData_t *data, 
+    AHR_UserData_t user_data
+)
 {
-    /*
-    pthread_mutex_lock(&processor->mutex);
-    AHR_Result_t result = AHR_StackPop(&processor->unused_results);
+    printf("Start PUT Request...\n");
+    AHR_ProcessorStatus_t status = AHR_PROC_OK;
+    AHR_MutexLock(processor->mutex);
+
+    AHR_Result_t *result = AHR_ResultStoreGetResult(
+        &processor->result_store, object
+    );
+    //
+    // Error Handling...
+    //
+    // ---- 
     if(!result)
     {
-        AHR_LogWarning(processor->logger, "Warning: Unable to retrieve unused element.");
-        return NULL;
+        AHR_LogWarning(
+            processor->logger,
+            "Warning: Unable to retrieve unused element."
+        );
+        printf("No Reslt..\n");
+        status = AHR_PROC_UNKNOWN_OBJECT;
+        goto end;
     }
-    AHR_RequestSetHeader(result->request, &data->header);
-    AHR_Put(result->request, data->url, data->body, result->response);
-    result->user_data = user_data;
-    
-    AHR_StackPush(&processor->requests, result);
-    
-    pthread_mutex_unlock(&processor->mutex);
-    AHR_CurlMultiWeakUp(processor->handle);
-    return AHR_RequestUUID(result->request);
-    */
-    return NULL;
+    // ---- 
+    if(!AHR_ProcessorTryLockResult(result))
+    {
+        AHR_LogInfo(
+            processor->logger,
+            "Sorry the Object you are requesting is busy."
+        );
+        printf("locked..\n");
+        status = AHR_PROC_OBJECT_BUSY;
+        goto end;
+    }
+    // ---- 
+    //
+    // Process...
+    //
+    AHR_ProcessorPrepareRequest(
+        processor,
+        object,
+        data,
+        user_data
+    );
+    AHR_Put(result->request, result->request_data.url, result->request_data.body, result->response);
+    AHR_ProcessorUnlockResult(result);
+end:
+    //pthread_mutex_unlock(&processor->mutex);
+    AHR_MutexUnlock(processor->mutex);
+    printf("PUT!!!\n");
+    printf("--> URL: %s\n", result->request_data.url);
+    return status;
 }
 
-AHR_Id_t AHR_ProcessorDelete(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data)
+AHR_ProcessorStatus_t AHR_ProcessorDelete(
+    AHR_Processor_t processor, 
+    size_t object,
+    const AHR_RequestData_t *data, 
+    AHR_UserData_t user_data
+)
 {
-    /*
-    pthread_mutex_lock(&processor->mutex);
-    AHR_Result_t result = AHR_StackPop(&processor->unused_results);
+    AHR_ProcessorStatus_t status = AHR_PROC_OK;
+    AHR_MutexLock(processor->mutex);
+
+    AHR_Result_t *result = AHR_ResultStoreGetResult(
+        &processor->result_store, object
+    );
+    //
+    // Error Handling...
+    //
+    // ---- 
     if(!result)
     {
-        AHR_LogWarning(processor->logger, "Warning: Unable to retrieve unused element.");
-        return NULL;
+        AHR_LogWarning(
+            processor->logger,
+            "Warning: Unable to retrieve unused element."
+        );
+        status = AHR_PROC_UNKNOWN_OBJECT;
+        goto end;
     }
-    AHR_RequestSetHeader(result->request, &data->header);
-    AHR_Delete(result->request, data->url, result->response);
-    result->user_data = user_data;
-    
-    AHR_StackPush(&processor->requests, result);
-    
-    pthread_mutex_unlock(&processor->mutex);
-    AHR_CurlMultiWeakUp(processor->handle);
-    return AHR_RequestUUID(result->request);
+    // ---- 
+    if(!AHR_ProcessorTryLockResult(result))
+    {
+        AHR_LogInfo(
+            processor->logger,
+            "Sorry the Object you are requesting is busy."
+        );
+        status = AHR_PROC_OBJECT_BUSY;
+        goto end;
+    }
+    // ---- 
+    //
+    // Process...
+    //
+    AHR_ProcessorPrepareRequest(
+        processor,
+        object,
+        data,
+        user_data
+    );
+    AHR_Delete(result->request, result->request_data.url, result->response);
+    AHR_ProcessorUnlockResult(result);
+end:
+    //pthread_mutex_unlock(&processor->mutex);
+    AHR_MutexUnlock(processor->mutex);
+    printf("DELETE!!!\n");
+    return status;
 }
 
-bool AHR_ProcessorIsResultReady(AHR_Result_t result)
-{
-    return atomic_load(&(result->done)) == 1;
-}
-
-bool AHR_DestroyResult(AHR_Result_t *result)
-{
-    if(!(*result)) return false;
-
-    AHR_DestroyRequest(&(*result)->request);
-    AHR_DestroyResponse(&(*result)->response);
-    free(*result);
-    *result = NULL;
-    */
-    return NULL;
-}
 //
 // --------------------------------------------------------------------------------------------------------------------
 //
@@ -526,8 +630,8 @@ static AHR_Result_t* AHR_RequestListFind(AHR_RequestList *list, void *handle)
 
 static void AHR_HandleNewRequests(AHR_Processor_t processor)
 {
-    const int lresult = pthread_mutex_trylock(&processor->mutex);
-    if(0 == lresult)
+    //const int lresult = pthread_mutex_trylock(&processor->mutex);
+    if(AHR_MutexTryLock(processor->mutex))
     {
         while(1)
         {
@@ -553,11 +657,60 @@ static void AHR_HandleNewRequests(AHR_Processor_t processor)
                 break;
             }
         }
-        pthread_mutex_unlock(&processor->mutex);
+        //pthread_mutex_unlock(&processor->mutex);
+        AHR_MutexUnlock(processor->mutex);
     }
 }
 
-static void AHR_CurlMultiInfoReadCallback(
+static void AHR_CurlMultiInfoReadErrorCallback(
+    void *arg,
+    AHR_Curl_t handle,
+    size_t error_code
+)
+{
+    assert(NULL != arg);
+    assert(NULL != handle.handle);
+
+    AHR_Processor_t processor = (AHR_Processor_t)arg;
+    AHR_Result_t *result = AHR_RequestListFind(
+        &processor->result_list,
+        handle.handle
+    );
+    assert(NULL != result->user_data.on_error);
+
+    if(!result)
+    {
+        AHR_LogError(processor->logger, "Error expecting to find Result Object, but do not found it.");
+        return;
+    }
+    result->user_data.on_error(
+        result->user_data.data,
+        AHR_ResultStoreObjectIndex(&processor->result_store, result),
+        error_code
+    );
+    const bool r = AHR_RequestListRemove(
+        &processor->result_list,
+        AHR_RequestHandle(result->request).handle
+    );
+    
+    AHR_LogInfo(processor->logger, "Remove Handle fom CURLM on Error...");
+    printf("Remove Handle from CURLM\n");
+    AHR_CurlMultiRemoveHandle(
+        processor->handle,
+        handle
+    );
+    if(r)
+    {
+        //AHR_DestroyResult(&result);
+        AHR_ProcessorUnlockResult(result);
+    }
+    else
+    {
+        AHR_LogError(processor->logger, "Unable to remove Element from Request List.");
+    }
+}
+
+static void AHR_CurlMultiInfoReadSuccessCallback(
     void *arg,
     AHR_Curl_t handle
 )
@@ -579,7 +732,10 @@ static void AHR_CurlMultiInfoReadCallback(
     assert(NULL != result->user_data.on_success); 
     result->user_data.on_success(
         result->user_data.data,
-        result->response
+        AHR_ResultStoreObjectIndex(&processor->result_store, result),
+        AHR_ResponseStatusCode(result->response),
+        AHR_ResponseBody(result->response),
+        AHR_ResponseBodyLength(result->response)
     );
     const bool r = AHR_RequestListRemove(
         &processor->result_list,
@@ -620,8 +776,8 @@ static void AHR_ExecuteAndPoll(AHR_Processor_t processor)
         {
             AHR_CurlMultiInfoReadData_t data = {
                 .data = processor,
-                .on_success=AHR_CurlMultiInfoReadCallback,
-                .on_error=AHR_CurlMultiInfoReadCallback
+                .on_success=AHR_CurlMultiInfoReadSuccessCallback,
+                .on_error=AHR_CurlMultiInfoReadErrorCallback
             };
             AHR_CurlMultiInfoRead(
                 processor->handle,

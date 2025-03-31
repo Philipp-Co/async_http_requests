@@ -2,3 +2,5 @@ build==1.2.2
 -e .
 typing_extensions
 mock
+requests
+pre-commit

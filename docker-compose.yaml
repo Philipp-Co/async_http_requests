@@ -1,0 +1,21 @@
+services:
+  ahr_server:
+    container_name: ahr_server
+    image: ahr_server
+    build:
+      context: .
+      dockerfile: docker/server/Dockerfile
+    #network_mode: 'host'
+    ports:
+      - "8000:8000"
+
+  ahr_client:
+    container_name: ahr_client
+    image: ahr_client
+    build:
+      context: .
+      dockerfile: docker/client/Dockerfile
+    network_mode: 'host'
+    depends_on:
+      ahr_server:
+        condition: service_started  

@@ -6,6 +6,7 @@
 //
 
 #include <stddef.h>
+#include <stdint.h>
 
 //
 // --------------------------------------------------------------------------------------------------------------------
@@ -41,8 +42,17 @@ typedef struct
 
 typedef struct
 {
+    char *data;
+    int32_t current_pos;
+    int32_t size;    
+} AHR_FileTransfer_t;
+
+typedef struct
+{
     void* handle;
     struct curl_slist *http_header;
+
+    AHR_FileTransfer_t file_transfer;
 } AHR_Curl_t;
 
 typedef struct
@@ -54,11 +64,13 @@ typedef struct
 } AHR_RequestData_t;
 
 typedef void* AHR_Id_t;
-typedef void (*AHR_ResponseReadyCallback)(void *user_data, AHR_HttpResponse_t response);
+typedef void (*AHR_ResponseSuccessCallback)(void *user_data, size_t object, size_t status_code, const char *buffer, size_t nbytes);
+typedef void (*AHR_ResponseErrorCallback)(void *user_data, size_t object, size_t error_code);
 typedef struct
 {
     void *data;
-    AHR_ResponseReadyCallback on_success;
+    AHR_ResponseSuccessCallback on_success;
+    AHR_ResponseErrorCallback on_error;
 } AHR_UserData_t;
 
 //

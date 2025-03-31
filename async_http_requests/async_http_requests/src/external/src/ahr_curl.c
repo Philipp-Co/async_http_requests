@@ -15,11 +15,7 @@
 // --------------------------------------------------------------------------------------------------------------------
 //
 
-struct AHR_Curl
-{
-    CURL* handle;
-    struct curl_slist *http_header;
-};
+typedef size_t (*AHR_CurlReadFunction_t)(char *ptr, size_t size, size_t nmemb, void *stream);
 
 //
 // --------------------------------------------------------------------------------------------------------------------
@@ -34,7 +30,10 @@ AHR_Curl_t AHR_CurlEasyInit(
 
     curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(handle, CURLOPT_HEADERFUNCTION, header_callback);
-    
+    curl_easy_setopt(handle, CURLOPT_VERBOSE, 1);
+
+    curl_easy_setopt(handle, CURLOPT_TIMEOUT, 5);
+
     AHR_Curl_t result = {
         .handle = handle,
         .http_header = NULL
@@ -60,10 +59,13 @@ void AHR_CurlEasyCleanUp(AHR_Curl_t handle)
 void AHR_CurlSetHeader(AHR_Curl_t *handle, const AHR_Header_t *header)
 {
     // TODO: Transfer Code here...
+    if(!header)
+    {
+        return;
+    }
 
     if(handle->http_header)
     {
-        printf("Free curl list..\n");
         curl_slist_free_all(handle->http_header);
     }
     
@@ -71,7 +73,6 @@ void AHR_CurlSetHeader(AHR_Curl_t *handle, const AHR_Header_t *header)
     for(size_t i=0;i<header->nheaders;++i)
     {
         char *buffer = malloc(AHR_HEADERENTRY_NAME_LEN + AHR_HEADERENTRY_VALUE_LEN + 2);
-        printf("Appedn Header %s\n", buffer);
         sprintf(buffer, "%s:%s", header->header[i].name, header->header[i].value);
         handle->http_header = curl_slist_append(handle->http_header, buffer);
     }
@@ -103,22 +104,74 @@ void AHR_CurlSetHttpMethodGet(AHR_Curl_t handle)
 void AHR_CurlSetHttpMethodPost(AHR_Curl_t handle, const char *body)
 {
     assert(NULL != handle.handle);
+    if(handle.http_header)
+    {
+        curl_slist_free_all(handle.http_header);
+    }
+    handle.http_header = curl_slist_append(handle.http_header, "Accept: application/json");
+    handle.http_header = curl_slist_append(handle.http_header, "Content-Type: application/json");
+    curl_easy_setopt(handle.handle, CURLOPT_HTTPHEADER, handle.http_header);
     if(body)
     {
-        assert(
-            CURLE_OK == curl_easy_setopt(handle.handle, CURLOPT_POSTFIELDSIZE, (long)strlen(body))
-        );
-        assert(
-            CURLE_OK == curl_easy_setopt(handle.handle, CURLOPT_POSTFIELDS, body)
-        );
+        curl_easy_setopt(handle.handle, CURLOPT_POSTFIELDS, body);
+        curl_easy_setopt(handle.handle, CURLOPT_POSTFIELDSIZE, (long)strlen(body));
     }
 }
 
-void AHR_CurlSetHttpMethodPut(AHR_Curl_t handle, const char *body)
+//
+// --------------------------------------------------------------------------------------------------------------------
+//
+
+static size_t AHR_PutReadCallback(char *ptr, size_t size, size_t nmemb, void *stream)
 {
-    curl_easy_setopt(handle.handle, CURLOPT_UPLOAD, 1L);
-    curl_easy_setopt(handle.handle, CURLOPT_POSTFIELDS, body);
-    curl_easy_setopt(handle.handle, CURLOPT_POSTFIELDSIZE, (long)strlen(body));
+    AHR_Curl_t *handle = (AHR_Curl_t*)stream;
+    if(handle->file_transfer.data && handle->file_transfer.size)
+    {
+        const size_t output_buffer_size = size * nmemb;
+        const size_t bytes_left_to_transfer = handle->file_transfer.size - handle->file_transfer.current_pos;
+        size_t bytes_to_transfer = bytes_left_to_transfer;
+        if(output_buffer_size <= bytes_left_to_transfer)
+        {
+            bytes_to_transfer = output_buffer_size;
+        }
+        memcpy(
+            ptr, 
+            &handle->file_transfer.data[handle->file_transfer.current_pos], 
+            bytes_to_transfer
+        );
+
+        handle->file_transfer.size -= bytes_to_transfer;
+        handle->file_transfer.current_pos += bytes_to_transfer;
+        return bytes_to_transfer;
+    }
+    return 0;
+}
+
+void AHR_CurlSetHttpMethodPut(AHR_Curl_t *handle, const char *body)
+{
+    assert(NULL != body);
+
+    if(handle->http_header)
+    {
+        curl_slist_free_all(handle->http_header);
+    }
+    handle->http_header = curl_slist_append(handle->http_header, "Accept: application/json");
+    handle->http_header = curl_slist_append(handle->http_header, "Content-Type: application/json");
+    handle->http_header = curl_slist_append(handle->http_header, "Expect:");
+    handle->http_header = curl_slist_append(handle->http_header, "Transfer-Encoding:");
+
+
+    curl_easy_setopt(handle->handle, CURLOPT_HTTPHEADER, handle->http_header);
+    curl_easy_setopt(handle->handle, CURLOPT_PUT, 1L);
+    curl_easy_setopt(handle->handle, CURLOPT_UPLOAD, 1L);
+    handle->file_transfer.data = malloc(strlen(body)+1);
+    memset(handle->file_transfer.data, '\0', strlen(body)+1);
+    memcpy(handle->file_transfer.data, body, strlen(body));
+    handle->file_transfer.current_pos = 0;
+    handle->file_transfer.size = strlen(body);
+    curl_easy_setopt(handle->handle, CURLOPT_INFILESIZE, (long)strlen(body));
+    curl_easy_setopt(handle->handle, CURLOPT_READFUNCTION, AHR_PutReadCallback);
+    curl_easy_setopt(handle->handle, CURLOPT_READDATA, handle);
 }
 
 void AHR_CurlSetHttpMethodDelete(AHR_Curl_t handle)
@@ -190,7 +243,13 @@ bool AHR_CurlMultiInfoRead(
             else
             {
                 printf("Error detected! Error Code: %s\n", curl_easy_strerror(m->data.result));
-                callback.on_error(callback.data, handle);
+                callback.on_error(callback.data, handle, 0);
+                printf("Nach dem Callback...\n");
+            }
+            if(handle.file_transfer.data)
+            {
+                free(handle.file_transfer.data);
+                handle.file_transfer.data = NULL;
             }
         }
     } while(m);

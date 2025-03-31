@@ -147,14 +147,16 @@ AHR_Status_t AHR_MakeRequest(AHR_HttpRequest_t request, AHR_HttpResponse_t respo
     return AHR_OK;
 } 
 
+void AHR_ResponseReset(AHR_HttpResponse_t response)
+{
+    memset(response->body.data, '\0', response->body.maxbytes);
+    response->body.nbytes = 0;
+    response->header.nheaders = 0;
+}
+
 void AHR_RequestSetHeader(AHR_HttpRequest_t request, const AHR_Header_t *header)
 {
     AHR_CurlSetHeader(&request->handle, header);
-}
-
-void AHR_RequestGetHeader(AHR_HttpRequest_t request, AHR_Header_t *header)
-{
-    // TODO calculate header!
 }
 
 void AHR_Post(AHR_HttpRequest_t request, const char *url, const char *body, AHR_HttpResponse_t response)
@@ -191,9 +193,10 @@ void AHR_Get(AHR_HttpRequest_t request, const char *url, AHR_HttpResponse_t resp
     assert(url != NULL);
 
     memset(request->url, '\0', 4096);
-    memcpy(request->url, url, strlen(url));
+    const size_t len = strlen(url);
+    const size_t nbytes = len >= 4095 ? 4095 : len;
+    memcpy(request->url, url, nbytes);
     AHR_CurlSetHttpMethodGet(request->handle);
-    //AHR_CurlSetHeader(&request->handle, NULL);
     AHR_CurlSetCallbackUserData(
         request->handle,
         response,
@@ -204,9 +207,15 @@ void AHR_Get(AHR_HttpRequest_t request, const char *url, AHR_HttpResponse_t resp
 
 void AHR_Put(AHR_HttpRequest_t request, const char *url, const char *body, AHR_HttpResponse_t response)
 {
+    assert(request != NULL);
+    assert(response != NULL);
+    assert(url != NULL);
+    
     memset(request->url, '\0', 4096);
-    memcpy(request->url, url, strlen(url));
-    AHR_CurlSetHttpMethodPut(request->handle, body);
+    const size_t len = strlen(url);
+    const size_t nbytes = len >= 4095 ? 4095 : len;
+    memcpy(request->url, url, len);
+    AHR_CurlSetHttpMethodPut(&request->handle, body);
     AHR_CurlSetHeader(&request->handle, NULL);
     AHR_CurlSetCallbackUserData(
         request->handle,
@@ -228,6 +237,11 @@ void AHR_Delete(AHR_HttpRequest_t request, const char *url, AHR_HttpResponse_t r
         response
     );
     AHR_MakeRequest(request, response);
+}
+
+size_t AHR_ResponseBodyLength(const AHR_HttpResponse_t response)
+{
+    return response->body.nbytes;
 }
 
 const char* AHR_ResponseBody(const AHR_HttpResponse_t response)

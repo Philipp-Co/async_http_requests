@@ -1,5 +1,9 @@
 """Initialize the python_async_requests Module."""
 
+#
+# ---------------------------------------------------------------------------------------------------------------------
+#
+
 _is_initialized: bool = False
 
 if not _is_initialized:
@@ -64,7 +68,7 @@ if not _is_initialized:
     #
     # =====================================================
     #
-    _libahr.AHR_CreateProcessor.argtypes = [c_void_p]
+    _libahr.AHR_CreateProcessor.argtypes = [c_size_t, c_void_p]
     _libahr.AHR_CreateProcessor.restype = POINTER(c_void_p)
 
     _libahr.AHR_ProcessorStart.argtypes = [c_void_p]
@@ -80,7 +84,8 @@ if not _is_initialized:
         
         _fields_ = [
             ('data', py_object),
-            ('on_success', CFUNCTYPE(c_void_p, py_object, c_void_p))
+            ('on_success', CFUNCTYPE(c_void_p, py_object, c_size_t, c_size_t, c_char_p, c_size_t)),
+            ('on_error', CFUNCTYPE(c_void_p, py_object, c_size_t, c_size_t)),
         ]
     
     class AHR_RequestData(Structure):
@@ -101,33 +106,49 @@ if not _is_initialized:
     _libahr.AHR_ProcessorNumberOfRequestObjects.argtypes = [c_void_p]
     _libahr.AHR_ProcessorNumberOfRequestObjects.restype = c_size_t
 
-    _libahr.AHR_ProcessorPrepareRequest.argtypes = [
-        c_void_p,
-        c_size_t,
-        POINTER(AHR_RequestData),
-        AHR_UserData
-    ]
-    _libahr.AHR_ProcessorPrepareRequest.restype = c_int
-
     #
     # =====================================================
     #
     _libahr.AHR_ProcessorMakeRequest.argtypes = [c_void_p, c_size_t]
     _libahr.AHR_ProcessorMakeRequest.restype = c_int
 
-    _libahr.AHR_ProcessorGet.argtypes = [c_void_p, c_size_t]
+    _libahr.AHR_ProcessorGet.argtypes = [
+        c_void_p, 
+        c_size_t,
+        POINTER(AHR_RequestData),
+        AHR_UserData,
+    ]
     _libahr.AHR_ProcessorGet.restype = c_int
     
-    _libahr.AHR_ProcessorPost.argtypes = [c_void_p, c_void_p, AHR_UserData]
-    _libahr.AHR_ProcessorPost.restype = c_void_p
+    _libahr.AHR_ProcessorPost.argtypes = [
+        c_void_p, 
+        c_size_t,
+        POINTER(AHR_RequestData),
+        AHR_UserData,
+    ]
+    _libahr.AHR_ProcessorPost.restype = c_int
     
-    _libahr.AHR_ProcessorPut.argtypes = [c_void_p, c_void_p, AHR_UserData]
-    _libahr.AHR_ProcessorPut.restype = c_void_p
+    _libahr.AHR_ProcessorPut.argtypes = [
+        c_void_p, 
+        c_size_t,
+        POINTER(AHR_RequestData),
+        AHR_UserData,
+    ]
+    _libahr.AHR_ProcessorPut.restype = c_int
     
-    _libahr.AHR_ProcessorDelete.argtypes = [c_void_p, c_void_p, AHR_UserData]
-    _libahr.AHR_ProcessorDelete.restype = c_void_p
+    _libahr.AHR_ProcessorDelete.argtypes = [
+        c_void_p, 
+        c_size_t,
+        POINTER(AHR_RequestData),
+        AHR_UserData,
+    ]
+    _libahr.AHR_ProcessorDelete.restype = c_int
     #
     # =====================================================
     #
 
     _is_initialized = True
+#
+# ---------------------------------------------------------------------------------------------------------------------
+#
+

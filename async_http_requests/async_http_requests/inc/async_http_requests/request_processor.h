@@ -67,7 +67,7 @@ typedef enum
 ///
 /// \brief  Create a new AHR_Processor_t Object.  
 ///
-AHR_Processor_t AHR_CreateProcessor(AHR_Logger_t logger);
+AHR_Processor_t AHR_CreateProcessor(size_t max_objects, AHR_Logger_t logger);
 ///
 /// \brief  Destroy the given Processor-Object.
 ///
@@ -110,12 +110,14 @@ size_t AHR_ProcessorNumberOfRequestObjects(const AHR_Processor_t processor);
 /// \pre    NULL != request_data
 ///         NULL != request_data->url
 ///
+/*
 AHR_ProcessorStatus_t AHR_ProcessorPrepareRequest(
     AHR_Processor_t processor,
     size_t object, 
     const AHR_RequestData_t *request_data,
     AHR_UserData_t data
 );
+*/
 ///
 /// \brief  Set the HTTP Method for the given Object.
 ///         If the Object is currently in use you can not change it.
@@ -123,11 +125,31 @@ AHR_ProcessorStatus_t AHR_ProcessorPrepareRequest(
 /// \param[in] processor - The managing Instance.
 /// \param[in] object - The Object for which the HTTP Method should be set.
 ///
-AHR_ProcessorStatus_t AHR_ProcessorGet(AHR_Processor_t processor, size_t object);
+AHR_ProcessorStatus_t AHR_ProcessorGet(
+    AHR_Processor_t processor, 
+    size_t object,
+    const AHR_RequestData_t *request_data,
+    AHR_UserData_t data
+);
 
-AHR_Id_t AHR_ProcessorPost(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data);
-AHR_Id_t AHR_ProcessorPut(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data);
-AHR_Id_t AHR_ProcessorDelete(AHR_Processor_t processor, const AHR_RequestData_t *data, AHR_UserData_t user_data);
+AHR_ProcessorStatus_t AHR_ProcessorPost(
+    AHR_Processor_t processor, 
+    size_t object,
+    const AHR_RequestData_t *data, 
+    AHR_UserData_t user_data
+);
+AHR_ProcessorStatus_t AHR_ProcessorPut(
+    AHR_Processor_t processor, 
+    size_t object,
+    const AHR_RequestData_t *data, 
+    AHR_UserData_t user_data
+);
+AHR_ProcessorStatus_t AHR_ProcessorDelete(
+    AHR_Processor_t processor, 
+    size_t object,
+    const AHR_RequestData_t *data, 
+    AHR_UserData_t user_data
+);
 
 ///
 /// \brief  Make a Request.

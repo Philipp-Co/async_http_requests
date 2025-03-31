@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------------------------------------------------
 #
 
-cmake_minimum_required(VERSION 3.31)
+cmake_minimum_required(VERSION 3.25)
 project(async_http_requests VERSION 0.0.0 LANGUAGES C)
 
 #
@@ -39,6 +39,7 @@ add_library(
     async_http_requests/src/logging.c
     async_http_requests/src/external/src/ahr_curl.c
     async_http_requests/src/private/src/result.c
+    async_http_requests/src/private/src/ahr_mutex.c
 )
 
 #

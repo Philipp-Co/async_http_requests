@@ -126,6 +126,7 @@ void AHR_Delete(AHR_HttpRequest_t request, const char *url, AHR_HttpResponse_t r
 /// \returns const char* - A NULL-terminated c-string.
 ///
 const char* AHR_ResponseBody(const AHR_HttpResponse_t response);
+size_t AHR_ResponseBodyLength(const AHR_HttpResponse_t response);
 ///
 /// \brief  Get the Response Headers for the given Object.
 ///
@@ -146,6 +147,7 @@ long AHR_ResponseStatusCode(const AHR_HttpResponse_t response);
 /// \returns    AHR_Status_t
 ///
 AHR_Status_t AHR_MakeRequest(AHR_HttpRequest_t request, AHR_HttpResponse_t response); 
+void AHR_ResponseReset(AHR_HttpResponse_t response);
 ///
 /// \brief  Get a unique Id which identifies this response object.
 ///

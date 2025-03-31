@@ -9,7 +9,6 @@
 #include <stdarg.h>
 
 #include <async_http_requests/logging.h>
-#include <sys/_types/_va_list.h>
 
 //
 // --------------------------------------------------------------------------------------------------------------------

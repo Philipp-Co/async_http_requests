@@ -16,8 +16,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-from dummyapp.views import GenericView 
+from dummyapp.views import GenericView, SimpleGet 
 
 urlpatterns = [
-    path('std/', GenericView.as_view()),
+        path('std/<str:name>/', GenericView.as_view()),
+        path('std/', SimpleGet.as_view()),
 ]

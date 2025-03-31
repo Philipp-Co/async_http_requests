@@ -25,7 +25,8 @@ SECRET_KEY = 'django-insecure-4tevxj)hdwt+l@ln6b-j-1kz_!z8us-osz%7ey2gf$szu82e=s
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# ALLOWED_HOSTS = ['ahr_server', '*']
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -37,6 +38,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'dummyapp',
 ]
 
 MIDDLEWARE = [
@@ -133,6 +136,6 @@ LOGGING = {
     },
     "root": {
         "handlers": ["console"],
-        "level": "INFO",
+        "level": "DEBUG",
     },
 }

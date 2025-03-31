@@ -3,6 +3,7 @@
 // --------------------------------------------------------------------------------------------------------------------
 //
 
+#include "async_http_requests/types.h"
 #include <async_http_requests/private/result.h>
 
 #include <stdlib.h>
@@ -46,6 +47,11 @@ AHR_Result_t* AHR_ResultStoreGetResult(AHR_ResultStore_t *store, size_t index)
 size_t AHR_ResultStoreSize(const AHR_ResultStore_t *store)
 {
     return store->nresults;
+}
+
+size_t AHR_ResultStoreObjectIndex(const AHR_ResultStore_t *store, const AHR_Result_t *result)
+{
+    return (result - store->results) / sizeof(AHR_Result_t*);
 }
 
 //

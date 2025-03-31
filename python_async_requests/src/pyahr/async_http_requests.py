@@ -3,85 +3,98 @@
 # ---------------------------------------------------------------------------------------------------------------------
 #
 
-from ._transactions.request import Request
-from ._transactions.response import Response
-from typing_extensions import Self
-from abc import ABC, abstractmethod
-from logging import getLogger, Logger
-from typing import Optional, List
-from ctypes import cdll, byref, POINTER,pointer, c_void_p, c_char, CFUNCTYPE, c_char_p, Structure, py_object, byref
-from ctypes import c_size_t
-from pyahr import _libahr, AHR_UserData, AHR_Header, AHR_HeaderEntry, AHR_RequestData 
-from .utils.string_decoder import StringDecoder, Utf8Decoder
 from copy import deepcopy
-from .interfaces.event_handler import EventHandler
-from json import dumps
-from logging import NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL
+from ctypes import CFUNCTYPE, byref, c_char_p, c_size_t, c_void_p, py_object
 from enum import IntEnum
+from json import dumps
+from logging import CRITICAL, DEBUG, ERROR, INFO, NOTSET, WARNING, Logger, getLogger
+from typing import Dict, List, Optional, Tuple
 
+from pyahr import AHR_Header, AHR_RequestData, AHR_UserData, _libahr
+from typing_extensions import Self
 
-#
-# ---------------------------------------------------------------------------------------------------------------------
-#
-
-class HttpProcessorFlowError(Exception):
-    def __init__(self, status: AHR_ProcessorStatus, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.__status : AHR_ProcessorStatus = status
-        pass
-    
-    def status(self) -> AHR_ProcessorStatus:
-        return self.__status
-    pass
+from ._interfaces.event_handler import AHR_EventHandler
+from ._transactions.request import AHR_Request, AHR_HttpMethod
+from ._transactions.response import AHR_Response
+from ._utils.string_decoder import AHR_IStringDecoder, AHR_Utf8Decoder
 
 #
 # ---------------------------------------------------------------------------------------------------------------------
 #
+
 
 class AHR_ProcessorStatus(IntEnum):
+    """Status Code."""
 
     AHR_PROC_OK = 0
     AHR_PROC_OBJECT_BUSY = 1
     AHR_PROC_UNKNOWN_OBJECT = 2
     AHR_PROC_NOT_ENOUGH_MEMORY = 3
-    AHR_PROC_UNKNOWN_ERROR = 4
-    
+    AHR_PROC_TIMEOUT = 4
+    AHR_PROC_UNKNOWN_ERROR = 5
+
     pass
+
 
 #
 # ---------------------------------------------------------------------------------------------------------------------
 #
 
-class DefaultEventHandler(EventHandler):
-    
+
+class AHR_HttpProcessorFlowError(Exception):
+    """A Flow Error.
+
+    This Error is raised every time when the Flow of the Http Request Processor is disrupted.
+    """
+
+    def __init__(self, status: AHR_ProcessorStatus, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__status: AHR_ProcessorStatus = status
+        pass
+
+    def status(self) -> AHR_ProcessorStatus:
+        return self.__status
+
+    pass
+
+
+#
+# ---------------------------------------------------------------------------------------------------------------------
+#
+
+
+class AHR_DefaultEventHandler(AHR_EventHandler):
+    """Defaulthandler to process AHR_Responses."""
+
     def __init__(self):
         super().__init__()
-        self.__responses: List[Response] = []
+        self.__responses: List[AHR_Response] = []
         pass
 
-    def handle(self, response: Response) -> None:
-        self.__responses.append(
-            response
-        )
+    def handle(self, response: AHR_Response) -> None:
+        self.__responses.append(response)
         pass
 
-    def next(self) -> Optional[Response]:
+    def next(self) -> Optional[AHR_Response]:
+        """Call this function to get the next AHR_Response."""
         if len(self.__responses) > 0:
             return self.__responses.pop(0)
         return None
 
     pass
 
+
 #
 # ---------------------------------------------------------------------------------------------------------------------
 #
 
-class Processor:
+
+class AHR_HttpRequestProcessor:
     """HTTP Request Processor.
 
     Example:
-        event_handler: DefaultEventHandler = DefaultEventHandler()
-        p: Processor = Processor(
+        event_handler: AHR_DefaultEventHandler = AHR_DefaultEventHandler()
+        p: AHR_HttpRequestProcessor = AHR_HttpRequestProcessor(
             url='http://www.google.de',
             event_handler=event_handler,
         )
@@ -91,9 +104,9 @@ class Processor:
         #
 
         # Create and prepare a Request.
-        request: Request = p.request().set_ressource(
+        request: AHR_Request = p.request().set_ressource(
             'some/ressource/'
-        )set_header(
+        ).set_header(
             {'test': 'yes'}
         ).set_query_parameter(
             {'foo', 'bar'}
@@ -108,21 +121,21 @@ class Processor:
         ...
 
         while True:
-            response: Optional[Response] = event_handler.next()
+            response: Optional[AHR_Response] = event_handler.next()
             if response is not None:
                 print(response)
     """
-    
+
     @CFUNCTYPE(c_void_p, py_object, c_char_p)
     def __log_info(self, msg):
         self.__logger.info(msg)
         pass
-    
+
     @CFUNCTYPE(c_void_p, py_object, c_char_p)
     def __log_warning(self, msg):
         self.__logger.warning(msg)
         pass
-    
+
     @CFUNCTYPE(c_void_p, py_object, c_char_p)
     def __log_error(self, msg):
         self.__logger.error(msg)
@@ -141,18 +154,25 @@ class Processor:
             }[loglevel]
         except KeyError:
             return 2
-    
-    def __init__(self, url: str, event_handler: EventHandler, logger: Optional[Logger] = None):
+
+    def __init__(
+        self,
+        url: str,
+        event_handler: AHR_EventHandler,
+        max_number_of_requestobjects: int = 5,
+        logger: Optional[Logger] = None,
+    ):
         """Constructor.
-        
+
         Args:
             url: str: The Base URL to send Requests to.
-            event_handler: EventHandler: A Handler that is called for each received HTTP Response.
+            event_handler: AHR_EventHandler: A Handler that is called for each received HTTP Response.
+            max_number_of_requestobjects: int = 5: Number of available Requestobjects, 1 <= x <= 25.
             logger: Optional[Logger] = None: The Logger to be used.
         """
-        self.__logger: Logger = logger if logger is not None else getLogger(self.__class__.__name__);
-        # AHR_Processotr_t Handle
-        func = CFUNCTYPE(c_void_p, c_void_p, c_char_p),
+        # Python Logger.
+        self.__logger: Logger = logger if logger is not None else getLogger(self.__class__.__name__)
+        # Configure libahr Logging.
         self.__ahr_logger = _libahr.AHR_CreateLogger(
             py_object(self),
             self.__log_info,
@@ -163,22 +183,32 @@ class Processor:
             self.__ahr_logger,
             c_size_t(self.__map_loglevel(self.__logger.level)),
         )
+        # HttpProcessor Handle from libahr.
+        max_number_of_requestobjects = max(min(max_number_of_requestobjects, 25), 1)
+        self.__ahr_processor: c_void_p = _libahr.AHR_CreateProcessor(max_number_of_requestobjects, self.__ahr_logger)
+        if self.__ahr_processor is None:
+            raise AssertionError(
+                'Unable to create Instance with given Arguments - '
+                f'max_number_of_requestobjects={max_number_of_requestobjects}.'
+            )
 
-        self.__ahr_processor: c_void_p = _libahr.AHR_CreateProcessor(
-            self.__ahr_logger
-        )
         # Response Body Decoder
-        self.__string_decoder: StringDecoder = Utf8Decoder()
+        self.__string_decoder: AHR_IStringDecoder = AHR_Utf8Decoder()
 
-        self.__url: str = url[0:len(url)-1] if url.endswith('/') else url
-        self.__event_handler: EventHandler = event_handler
+        # URL this Instance uses.
+        self.__url: str = url[0 : len(url) - 1] if url.endswith('/') else url  # noqa: E203
 
-        self.__requests = {}
+        # Eventhandler wich is called for each Response to a Request.
+        self.__event_handler: AHR_EventHandler = event_handler
 
-        self.__request_objects: Dict[int, Tuple[bool, Request]] = {}
+        # Table for known Request/Response Objects and
+        # and for Copies of ongoing requests.
+        self.__requests: Dict[int, AHR_Request] = {}
+        self.__request_objects: Dict[int, Tuple[bool, AHR_Request]] = {}
         for i in range(0, _libahr.AHR_ProcessorNumberOfRequestObjects(self.__ahr_processor)):
-            self.__request_objects[i] = (False, Request(i))
+            self.__request_objects[i] = (False, AHR_Request(i))
 
+        # Start this Instance.
         if not _libahr.AHR_ProcessorStart(self.__ahr_processor):
             raise RuntimeError('Unable to start Http Request Processor!')
         pass
@@ -193,17 +223,17 @@ class Processor:
 
     def __del__(self):
         """Destructor.
-        
+
         Destroyes created _libahr Objects.
         """
-        _libahr.AHR_ProcessorStop(self.__ahr_processor);
+        _libahr.AHR_ProcessorStop(self.__ahr_processor)
         _libahr.AHR_DestroyProcessor(byref(self.__ahr_processor))
         _libahr.AHR_DestroyLogger(byref(self.__ahr_logger))
         pass
 
-    def set_string_decoder(self, decoder: StringDecoder) -> Self:
+    def set_string_decoder(self, decoder: AHR_IStringDecoder) -> Self:
         """Set the Stringdecode.
-        
+
         The Stringdecoder is used to decode the Responsebody received by the remote server.
 
         Returns:
@@ -212,47 +242,56 @@ class Processor:
         self.__string_decoder = decoder
         return self
 
-    @CFUNCTYPE(c_void_p, py_object, c_void_p)
-    def __callback(self, response) -> None:
+    @CFUNCTYPE(c_void_p, py_object, c_size_t, c_size_t)
+    def __on_error(self, robject, error_code) -> None:
+        """This Function is called by libahr in case Request has failed with an Error."""
+        try:
+            self.__logger.info('Error: Response received...')
+            self.__logger.info(
+                f'An Error occured during handling of Requestobject {robject}, Error Code ist {error_code}.'
+            )
+            self.__event_handler.handle(
+                AHR_Response(self.__requests[robject]).set_error_code(error_code).set_status_code(500).set_body('')
+            )
+            self.__requests.pop(robject)
+        except Exception as e:  # noqa: B902
+            if robject in self.__requests:
+                self.__requests.pop(robject)
+
+            self.__logger.exception(e)
+            self.__event_handler.handle(AHR_Response(self.__requests[robject]).set_status_code(500)).set_body('')
+        pass
+
+    @CFUNCTYPE(c_void_p, py_object, c_size_t, c_size_t, c_char_p, c_size_t)
+    def __on_success(self, robject: c_size_t, status_code: c_size_t, buffer: c_char_p, nbytes: c_size_t) -> None:
         """This function is called from libahr when the response to a request was fully received.
 
         Args:
-            response:   This is a ctype Object for AHR_Response_t Object in libahr. 
-                        This Object can be used as an Argument for calls to
-                        "AHR_Response*". 
+            robject: py_object: A Pythonobject.
+            status_code: c_size_t: A Status Code, 0 <= x.
+            buffer: c_char_p: Buffer with "nbytes" length.
+            nbytes: Number of Bytes in "buffer".
         """
-        response_id = _libahr.AHR_ResponseUUID(response)
         try:
-            info = AHR_Header()
-            _libahr.AHR_ResponseHeader(response, byref(info))
-            self.__event_handler.handle(
-                Response(
-                    self.__requests[response_id]
-                ).set_status_code(
-                    _libahr.AHR_ResponseStatusCode(response)
-                ).set_header(
-                    {
-                        info.header[i].name.decode().rstrip(): info.header[i].value.decode().rstrip() for i in range(0, info.nheader)
-                    } 
-                ).set_body(
-                    self.__string_decoder.decode(
-                        _libahr.AHR_ResponseBody(response)
-                    )
-                )
+            self.__logger.info('Success: Response received...')
+            self.__logger.info(
+                self.__requests
             )
-            self.__requests.pop(response_id)
-        except Exception as e:
+            self.__event_handler.handle(
+                AHR_Response(self.__requests[robject])
+                .set_status_code(status_code)
+                .set_body(self.__string_decoder.decode(buffer if buffer is not None else ''))
+            )
+            self.__requests.pop(robject)
+        except Exception as e:  # noqa: B902
+            if robject in self.__requests:
+                self.__requests.pop(robject)
+
             self.__logger.exception(e)
-            self.__event_handler.handle(
-                Response(
-                    self.__requests[response_id]
-                ).set_status_code(
-                    -1
-                )
-            )
+            #self.__event_handler.handle(AHR_Response(self.__requests[robject]).set_status_code(-1))
         pass
-    
-    def __create_request_data(self, request: Request) -> AHR_RequestData:
+
+    def __create_request_data(self, request: AHR_Request) -> AHR_RequestData:
         """Create the AHR_RequestData Structure and fill it with the Requests contents."""
         request_data = AHR_RequestData()
         request_data.header = AHR_Header()
@@ -261,7 +300,7 @@ class Processor:
         url: str = f'{self.__url}/{request.ressource()}\0'
         request_data.url = url.encode()
         request_data.body = request.body().encode() if request.body() is not None else None
-        
+
         i = 0
         for header in request.header():
             request_data.header.header[i].name = header.encode()
@@ -269,143 +308,115 @@ class Processor:
             i = i + 1
         request_data.nheader = i
         return request_data
-    
-    def request(self) -> Request:
+
+    def create_request(self) -> AHR_Request:
         """Get a Requestobject.
 
         Raises:
             MemoryError: If there are no more Objects available.
         """
+        item: int
         for item in self.__request_objects:
             if not self.__request_objects[item][0]:
                 self.__request_objects[item] = (True, self.__request_objects[item][1])
                 return self.__request_objects[item][1]
         raise MemoryError('Currently no more Requestobjects available.')
 
-    def prepare_request(self, request: Request) -> Self:
-        """Prepare Request Parameter for a Requestobject."""
-        request_data: AHR_RequestData = self.__create_request_data(request)
-        res: AHR_ProcessorStatus = AHR_ProcessorStatus(
-            _libahr.AHR_ProcessorPrepareRequest(
-                self.__ahr_processor,
-                request.handle(),
-                byref(request_data),
-                AHR_UserData(
-                    py_object(self),
-                    self.__callback,
-                ), 
-            )
-        )
-        if AHR_ProcessorStatus.AHR_PROC_OK != res:
-            raise HttpProcessorFlowError(status=res)
-        return self
-    
-    def make_request(self, request: Request) -> Self:
-        self.__requests[
-            _libahr.AHR_ProcessorTransactionId(self.__ahr_processor, request.handle())
-        ] = deepcopy(request)
-        res: AHR_ProcessorStatus = AHR_ProcessorStatus( 
-            _libahr.AHR_ProcessorMakeRequest(
-                self.__ahr_processor,
-                request.handle()
-            )
-        )
-        if AHR_ProcessorStatus.AHR_PROC_OK != res:
-            raise HttpProcessorFlowError(status=res)
-        return self
+    def make_request(self, request: AHR_Request) -> Self:
+        """Make a Request.
 
-    def get(self, request: Request) -> Self:
-        """Create and execute a HTTP GET Request.
-
-        It is not allowed to append a Payload in the Requet Body. 
-
-        Example:
-            p.get(
-                Request(ressource='')
-            )
+        Raises:
+            AHR_HttpProcessorFlowError: If the Request Object is currently busy or if an Error occured.
         """
-        #self.__requests[
-        #    _libahr.AHR_ProcessorTransactionId(self.__ahr_processor, request.handle())
-        #] = deepcopy(request)
-        status: AHR_ProcessorStatus = AHR_ProcessorStatus(
-            _libahr.AHR_ProcessorGet(
-                self.__ahr_processor,
-                request.handle(),
-            )
+        if request in self.__requests:
+            raise AHR_HttpProcessorFlowError(status=AHR_ProcessorStatus.AHR_PROC_OBJECT_BUSY)
+
+        self.__requests[request.handle()] = request # deepcopy(request)
+        self.__logger.info(
+            f'Make Request wiht handle {request.handle()}'
         )
-        if AHR_ProcessorStatus.AHR_PROC_OK != status:
-            raise HttpProcessorFlowError(status=res)
+        self.__logger.info(
+            self.__requests
+        )
+        res: AHR_ProcessorStatus = AHR_ProcessorStatus(
+            _libahr.AHR_ProcessorMakeRequest(self.__ahr_processor, request.handle())
+        )
+        if AHR_ProcessorStatus.AHR_PROC_OK != res:
+            raise AHR_HttpProcessorFlowError(status=res)
         return self
-    
-    def post(self, request: Request) -> Self:
-        """Create and execute a HTTP POST Request.
+
+    def configure_request(self, request: AHR_Request) -> Self:
+        """Configure a Request Object.
         
-        Post Requets are always done as Application/JSON with a payload in the Request Body. 
-        
-        Example:
-            p.post(
-                Request(
-                    ressource=''
-                ).set_body(
-                    dumps(
-                        {
-                            'foo': 'bar',
-                        }
+        The internal C-Structures are updated. Call this function whenever the Python Request Object changes.
+        """
+        request_data: AHR_RequestData = self.__create_request_data(request)
+        status: AHR_ProcessorStatus
+        match request.http_method():
+            case AHR_HttpMethod.GET:
+                status = AHR_ProcessorStatus(
+                    _libahr.AHR_ProcessorGet(
+                        self.__ahr_processor,
+                        request.handle(),
+                        byref(request_data),
+                        AHR_UserData(
+                            py_object(self),
+                            self.__on_success,
+                            self.__on_error,
+                        ),
                     )
                 )
-            ) 
-        """
-        request_data: AHR_RequestData = self.__create_request_data(request)
-        request_id = _libahr.AHR_ProcessorPost(
-            self.__ahr_processor,
-            byref(request_data),
-            AHR_UserData(
-                py_object(self),
-                self.__callback,
-            )
-        )
-        self.__requests[request_id] = deepcopy(request)
+                pass
+            case AHR_HttpMethod.POST:
+                print('Configure POST')
+                status = AHR_ProcessorStatus(
+                    _libahr.AHR_ProcessorPost(
+                        self.__ahr_processor,
+                        request.handle(),
+                        byref(request_data),
+                        AHR_UserData(
+                            py_object(self),
+                            self.__on_success,
+                            self.__on_error,
+                        ),
+                    )
+                )
+            case AHR_HttpMethod.PUT:
+                status = AHR_ProcessorStatus(
+                    _libahr.AHR_ProcessorPut(
+                        self.__ahr_processor,
+                        request.handle(),
+                        byref(request_data),
+                        AHR_UserData(
+                            py_object(self),
+                            self.__on_success,
+                            self.__on_error,
+                        ),
+                    )
+                )
+            case AHR_HttpMethod.DELETE:
+                status = AHR_ProcessorStatus(
+                    _libahr.AHR_ProcessorDelete(
+                        self.__ahr_processor,
+                        request.handle(),
+                        byref(request_data),
+                        AHR_UserData(
+                            py_object(self),
+                            self.__on_success,
+                            self.__on_error,
+                        ),
+                    )
+                )
+            case _:
+                raise AssertionError(f'Unknown HTTP Method: {request.http_method()}.')
+
+        if AHR_ProcessorStatus.AHR_PROC_OK != status:
+            raise AHR_HttpProcessorFlowError(status=status)
         return self
 
-    def put(self, request: Request) -> Self:
-        """Create and execute a HTTP PUT Request.
-
-        Example:
-            See post().
-        """
-        request_data: AHR_RequestData = self.__create_request_data(request)
-        request_id = _libahr.AHR_ProcessorPut(
-            self.__ahr_processor,
-            byref(request_data),
-            AHR_UserData(
-                py_object(self),
-                self.__callback,
-            )
-        )
-        self.__requests[request_id] = deepcopy(request)
-        return self
-
-    def delete(self, request: Request) -> Self:
-        """Create and execute a HTTP DELETE Request.
-        
-        Example:
-            See get().
-        """
-        request_data: AHR_RequestData = self.__create_request_data(request)
-        request_id = _libahr.AHR_ProcessorDelete(
-            self.__ahr_processor,
-            byref(request_data),
-            AHR_UserData(
-                py_object(self),
-                self.__callback,
-            )
-        )
-        self.__requests[request_id] = deepcopy(request)
-        return self
-    
     def number_of_pending_requests(self) -> int:
         """Get the number of pending requests.
-        
+
         Returns the number of requests for which no response was received yet.
 
         Returns:
@@ -415,21 +426,20 @@ class Processor:
 
     def pending_requests(self) -> List[int]:
         """Returns the Ids of pending requests."""
-        return [key for key in self.__requests]
+        return list(self.__requests.keys())
 
     def __repr__(self):
+        """Returns a Representation as Python Nativ Structures."""
         return {
-            'pending_requests': [
-                key for key in self.__requests.keys()
-            ], 
+            'pending_requests': list(self.__requests.keys()),
         }
-    
+
     def __str__(self) -> str:
-        return dumps(
-            self.__repr__()
-        )
+        """To String Function."""
+        return dumps(self.__repr__())
 
     pass
+
 
 #
 # ---------------------------------------------------------------------------------------------------------------------

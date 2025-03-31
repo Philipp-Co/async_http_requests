@@ -27,6 +27,7 @@ typedef struct
 
 typedef struct
 {
+    atomic_int *current_state_of_result;
     AHR_Result_t *results;
     size_t nresults;
 } AHR_ResultStore_t;
@@ -36,6 +37,7 @@ AHR_ResultStore_t AHR_CreateResultStore(size_t max_size);
 void AHR_DestroyResultStore(AHR_ResultStore_t *store);
 AHR_Result_t* AHR_ResultStoreGetResult(AHR_ResultStore_t *store, size_t index);
 size_t AHR_ResultStoreSize(const AHR_ResultStore_t *store);
+size_t AHR_ResultStoreObjectIndex(const AHR_ResultStore_t *store, const AHR_Result_t *result);
 
 //
 // --------------------------------------------------------------------------------------------------------------------
