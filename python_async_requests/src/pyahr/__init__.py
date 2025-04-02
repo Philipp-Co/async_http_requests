@@ -9,9 +9,28 @@ _is_initialized: bool = False
 if not _is_initialized:
 
     from ctypes import cdll, byref, POINTER,pointer, c_void_p, c_char, CFUNCTYPE, c_char_p, c_long, Structure, py_object, c_size_t, c_bool, c_int
-    from os import environ
-    
-    lib_path: str = environ.get('LIB_AHR_PATH', 'libahr.dylib')
+    from os import environ, path
+
+    # determine if running in a venv
+    from sys import prefix, base_prefix
+    if prefix != base_prefix:
+        #
+        # Set a default for the Library.
+        # The shared Library should be installed to "pyahr" which is the Package Root Directory.
+        # Use __file__ to get the Path to this current file, which is located in the Package Root also and
+        # extract the Directoryname from it and use it for the default shared Library Path.
+        #
+        lib_path = environ.get('LIB_AHR_PATH', f'{path.dirname(__file__)}/libahr.so')
+    else:
+        raise ValueError('Before using this Package set the environmental Variable "LIB_AHR_PATH". The containt must point to the libahr.* shared Library to be used.')
+
+    #
+    # Start Package Initialization.
+    #
+
+    #
+    # =====================================================
+    #
 
     class AHR_HeaderEntry(Structure):
 

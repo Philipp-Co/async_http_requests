@@ -27,6 +27,8 @@ typedef struct AHR_HttpRequest* AHR_HttpRequest_t;
 struct AHR_HttpResponse;
 typedef struct AHR_HttpResponse* AHR_HttpResponse_t;
 
+struct AHR_Curl;
+typedef struct AHR_Curl* AHR_Curl_t;
 
 typedef struct
 {
@@ -46,14 +48,6 @@ typedef struct
     int32_t current_pos;
     int32_t size;    
 } AHR_FileTransfer_t;
-
-typedef struct
-{
-    void* handle;
-    struct curl_slist *http_header;
-
-    AHR_FileTransfer_t file_transfer;
-} AHR_Curl_t;
 
 typedef struct
 { 

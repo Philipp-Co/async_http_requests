@@ -132,7 +132,7 @@ void AHR_DestroyRequest(AHR_HttpRequest_t *request)
 
     AHR_CurlEasyCleanUp((*request)->handle);
     (*request)->url = NULL;
-    (*request)->handle.handle = NULL;
+    (*request)->handle = NULL;
     *request = NULL;
 }
 
@@ -156,7 +156,7 @@ void AHR_ResponseReset(AHR_HttpResponse_t response)
 
 void AHR_RequestSetHeader(AHR_HttpRequest_t request, const AHR_Header_t *header)
 {
-    AHR_CurlSetHeader(&request->handle, header);
+    AHR_CurlSetHeader(request->handle, header);
 }
 
 void AHR_Post(AHR_HttpRequest_t request, const char *url, const char *body, AHR_HttpResponse_t response)
@@ -176,7 +176,7 @@ void AHR_Post(AHR_HttpRequest_t request, const char *url, const char *body, AHR_
     memset(request->url, '\0', 4096);
     memcpy(request->url, url, strlen(url));
     
-    AHR_CurlSetHeader(&request->handle, NULL);
+    AHR_CurlSetHeader(request->handle, NULL);
     AHR_CurlSetHttpMethodPost(request->handle, body);
     AHR_CurlSetCallbackUserData(
         request->handle,
@@ -215,8 +215,8 @@ void AHR_Put(AHR_HttpRequest_t request, const char *url, const char *body, AHR_H
     const size_t len = strlen(url);
     const size_t nbytes = len >= 4095 ? 4095 : len;
     memcpy(request->url, url, len);
-    AHR_CurlSetHttpMethodPut(&request->handle, body);
-    AHR_CurlSetHeader(&request->handle, NULL);
+    AHR_CurlSetHttpMethodPut(request->handle, body);
+    AHR_CurlSetHeader(request->handle, NULL);
     AHR_CurlSetCallbackUserData(
         request->handle,
         response,
@@ -230,7 +230,7 @@ void AHR_Delete(AHR_HttpRequest_t request, const char *url, AHR_HttpResponse_t r
     memset(request->url, '\0', 4096);
     memcpy(request->url, url, strlen(url));
     AHR_CurlSetHttpMethodDelete(request->handle);
-    AHR_CurlSetHeader(&request->handle, NULL);
+    AHR_CurlSetHeader(request->handle, NULL);
     AHR_CurlSetCallbackUserData(
         request->handle,
         response,

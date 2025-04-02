@@ -51,7 +51,16 @@ size_t AHR_ResultStoreSize(const AHR_ResultStore_t *store)
 
 size_t AHR_ResultStoreObjectIndex(const AHR_ResultStore_t *store, const AHR_Result_t *result)
 {
-    return (result - store->results) / sizeof(AHR_Result_t*);
+    //
+    // Assert that store->results <= result < (store->results + store->nresults)
+    //
+    assert(result >= store-results);
+    assert(result < (store-results + store->nresults));
+    //
+    // Return Index into Resultarray.
+    // Pointerarithmetic!!!
+    //
+    return (result - store->results);
 }
 
 //

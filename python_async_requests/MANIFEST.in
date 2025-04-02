@@ -1,0 +1,8 @@
+include async_http_requests/async_http_requests/inc/async_http_requests/async_http_requests.h
+include async_http_requests/async_http_requests/inc/async_http_requests/logging.h
+include async_http_requests/async_http_requests/inc/async_http_requests/request_processor.h
+include async_http_requests/async_http_requests/inc/async_http_requests/stack.h
+include async_http_requests/async_http_requests/inc/async_http_requests/types.h
+include async_http_requests/async_http_requests/src/external/inc/external/async_http_requests/ahr_curl.h
+include async_http_requests/async_http_requests/src/private/inc/async_http_requests/private/ahr_mutex.h
+include async_http_requests/async_http_requests/src/private/inc/async_http_requests/private/result.h

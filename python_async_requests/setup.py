@@ -1,6 +1,19 @@
 from setuptools import setup, Extension
+from distutils.command.build_ext import build_ext
+import os
+
+
+class AhrBuilder(build_ext):
+    
+    def get_ext_filename(self, ext_name):
+        return os.path.join(*ext_name.split('.')) + '.so'
+
+    pass
 
 setup(
+    cmdclass={
+        'build_ext': AhrBuilder,
+    },
     include_dirs=[
         'async_http_requests/async_http_requests/inc/async_http_requests/async_http_requests.h',
         'async_http_requests/async_http_requests/inc/async_http_requests/logging.h',
@@ -13,7 +26,7 @@ setup(
     ],
     ext_modules=[
         Extension(
-            'libahr',
+            'pyahr.libahr',
             [
                 'async_http_requests/async_http_requests/src/async_http_requests.c',
                 'async_http_requests/async_http_requests/src/logging.c',
@@ -34,7 +47,8 @@ setup(
             extra_compile_args=[
                 '-O2',
             ],
+            language='C',
         )
-    ]
+    ],
 )
 

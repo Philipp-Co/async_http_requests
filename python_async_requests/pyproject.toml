@@ -5,7 +5,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "asynchronous_http_requests"
+name = "ahr"
 version = "0.0.0"
 authors = [
   { name="Philipp Kroll", email="example@web.de" },

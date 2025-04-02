@@ -588,7 +588,7 @@ static bool AHR_RequestListRemove(AHR_RequestList *list, void *handle)
         return false;
     }
 
-    if(handle == AHR_RequestHandle(list->head->result->request).handle)
+    if(handle == AHR_CurlGetHandle(AHR_RequestHandle(list->head->result->request)))
     {
         struct AHR_RequestListNode *next = list->head->next;
         free(list->head);
@@ -601,7 +601,7 @@ static bool AHR_RequestListRemove(AHR_RequestList *list, void *handle)
     while(current)
     {
         {
-            if(handle == AHR_RequestHandle(current->next->result->request).handle)
+            if(handle == AHR_CurlGetHandle(AHR_RequestHandle(current->next->result->request)))
             {
                 struct AHR_RequestListNode *tmp = current->next->next;
                 free(current->next);
@@ -619,7 +619,7 @@ static AHR_Result_t* AHR_RequestListFind(AHR_RequestList *list, void *handle)
     struct AHR_RequestListNode *current = list->head;
     while(current)
     {
-        if(handle == AHR_RequestHandle(current->result->request).handle)
+        if(handle == AHR_CurlGetHandle(AHR_RequestHandle(current->result->request)))
         {
             return current->result;
         }
@@ -669,12 +669,12 @@ static void AHR_CurlMultiInfoReadErrorCallback(
 )
 {
     assert(NULL != arg);
-    assert(NULL != handle.handle);
+    assert(NULL != AHR_CurlGetHandle(handle));
 
     AHR_Processor_t processor = (AHR_Processor_t)arg;
     AHR_Result_t *result = AHR_RequestListFind(
         &processor->result_list,
-        handle.handle
+        AHR_CurlGetHandle(handle)
     );
     assert(NULL != result->user_data.on_error);
 
@@ -690,11 +690,10 @@ static void AHR_CurlMultiInfoReadErrorCallback(
     );
     const bool r = AHR_RequestListRemove(
         &processor->result_list,
-        AHR_RequestHandle(result->request).handle
+        AHR_CurlGetHandle(AHR_RequestHandle(result->request))
     );
     
     AHR_LogInfo(processor->logger, "Remove Handle fom CURLM on Error...");
-    printf("Remove Handle from CURLM\n");
     AHR_CurlMultiRemoveHandle(
         processor->handle,
         handle
@@ -716,12 +715,12 @@ static void AHR_CurlMultiInfoReadSuccessCallback(
 )
 {
     assert(NULL != arg);
-    assert(NULL != handle.handle);
+    assert(NULL != AHR_CurlGetHandle(handle));
 
     AHR_Processor_t processor = (AHR_Processor_t)arg;
     AHR_Result_t *result = AHR_RequestListFind(
         &processor->result_list,
-        handle.handle
+        AHR_CurlGetHandle(handle)
     );
     if(!result)
     {
@@ -739,7 +738,7 @@ static void AHR_CurlMultiInfoReadSuccessCallback(
     );
     const bool r = AHR_RequestListRemove(
         &processor->result_list,
-        AHR_RequestHandle(result->request).handle
+        AHR_CurlGetHandle(AHR_RequestHandle(result->request))
     );
     AHR_CurlMultiRemoveHandle(
         processor->handle,
