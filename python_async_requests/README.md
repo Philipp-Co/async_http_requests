@@ -40,13 +40,3 @@ Run Unittests.
     cd test/
     python run_test
 
-## Systemtest
-
-Run Systemtests. These Tests use a simple Webserver to check if this Package works with a "real" Webserver.
-
-### Docker Compose
-
-To run this kind of Test install docker-compose. 
-The Repo contains a docker-compose.yaml file which defines a Client and a Server Service.
-The Client Service contains the Testcode, the Server Service is used as its Counter-Part.
-
