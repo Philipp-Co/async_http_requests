@@ -10,10 +10,14 @@ This Package enables your Project to handle HTTP Requests in an asynchronous way
 C Code.
 libahr is written in C. It builds on libcurl and provides some additional utility Features.
 
+If you want to learn more about libahr take a look at async_http_requests/.
+
 ## python_async_http_requests - pyahr
 
 Python Code.
 This is a Wrapper for libahr in Python. pyahr allows you to use libahr from within your Pythonscripts.
+
+If you want to learn more about pyahr take a look at python_async_http_requests/.
 
 ## Systemtest
 
