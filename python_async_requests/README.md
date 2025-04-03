@@ -2,6 +2,25 @@
 
 This Package contains the Source Code for asynchronous Http Requests.
 
+pyahr implements a Wrapper around libahr.
+pyahr provides an easy Interface to interact with libahr from within python.
+
+
+    from async_http_requests import AHR_HttpRequestProcessor
+    
+    processor: AHR_HttpRequestProcessor = AHR_HttpRequestProcessor()
+    request: AHR_Request = processor.create_request()
+    processor.configure_request(
+        request.set_http_method(
+            HttpMethod.POST
+        ).set_body(
+            '{"test": "x"}'
+        )
+    ).make_request(
+        request
+    )
+
+
 # Build Package 
 
 This Project builds libahr.so/.dylib when installing it into the Projectenvironment.
