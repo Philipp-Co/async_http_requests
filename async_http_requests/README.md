@@ -75,6 +75,12 @@ Before using the cppcheck Scripts, install cppcheck, https://cppcheck.sourceforg
 
 ## Build
 
+This Library is developed with 
+    
+    Apple clang version 17.0.0 (clang-1700.0.13.3)
+    Target: arm64-apple-darwin24.4.0
+    Thread model: posix
+
 Create a Build-Directory enter it, run CMake and build.
 
     mkdir build/ && cd build/
