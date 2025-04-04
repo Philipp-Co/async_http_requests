@@ -397,7 +397,6 @@ AHR_ProcessorStatus_t AHR_ProcessorPost(
     AHR_UserData_t user_data
 )
 {
-    printf("Start POST Request...\n");
     AHR_ProcessorStatus_t status = AHR_PROC_OK;
     AHR_MutexLock(processor->mutex);
 
@@ -414,7 +413,6 @@ AHR_ProcessorStatus_t AHR_ProcessorPost(
             processor->logger,
             "Warning: Unable to retrieve unused element."
         );
-        printf("No Reslt..\n");
         status = AHR_PROC_UNKNOWN_OBJECT;
         goto end;
     }
@@ -425,7 +423,6 @@ AHR_ProcessorStatus_t AHR_ProcessorPost(
             processor->logger,
             "Sorry the Object you are requesting is busy."
         );
-        printf("locked..\n");
         status = AHR_PROC_OBJECT_BUSY;
         goto end;
     }
@@ -443,8 +440,6 @@ AHR_ProcessorStatus_t AHR_ProcessorPost(
     AHR_ProcessorUnlockResult(result);
 end:
     AHR_MutexUnlock(processor->mutex);
-    printf("POST!!!\n");
-    printf("--> URL: %s\n", result->request_data.url);
     return status;
 }
 
@@ -455,7 +450,6 @@ AHR_ProcessorStatus_t AHR_ProcessorPut(
     AHR_UserData_t user_data
 )
 {
-    printf("Start PUT Request...\n");
     AHR_ProcessorStatus_t status = AHR_PROC_OK;
     AHR_MutexLock(processor->mutex);
 
@@ -472,7 +466,6 @@ AHR_ProcessorStatus_t AHR_ProcessorPut(
             processor->logger,
             "Warning: Unable to retrieve unused element."
         );
-        printf("No Reslt..\n");
         status = AHR_PROC_UNKNOWN_OBJECT;
         goto end;
     }
@@ -483,7 +476,6 @@ AHR_ProcessorStatus_t AHR_ProcessorPut(
             processor->logger,
             "Sorry the Object you are requesting is busy."
         );
-        printf("locked..\n");
         status = AHR_PROC_OBJECT_BUSY;
         goto end;
     }
@@ -501,8 +493,6 @@ AHR_ProcessorStatus_t AHR_ProcessorPut(
     AHR_ProcessorUnlockResult(result);
 end:
     AHR_MutexUnlock(processor->mutex);
-    printf("PUT!!!\n");
-    printf("--> URL: %s\n", result->request_data.url);
     return status;
 }
 
@@ -556,7 +546,6 @@ AHR_ProcessorStatus_t AHR_ProcessorDelete(
     AHR_ProcessorUnlockResult(result);
 end:
     AHR_MutexUnlock(processor->mutex);
-    printf("DELETE!!!\n");
     return status;
 }
 
