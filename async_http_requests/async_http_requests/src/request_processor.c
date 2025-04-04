@@ -30,17 +30,6 @@
 //
 
 ///
-/// \brief  Defines the Number of Transaktionobjects created initially.
-///
-
-#define AHR_PROCESSOR_MAX_URL_LEN (4096-1)
-#define AHR_PROCESSOR_MAX_BODY_SIZE ((4096 * 16)-1)
-
-//
-// --------------------------------------------------------------------------------------------------------------------
-//
-
-///
 /// \brief  This Structure holds the state of a Transaktion with the Server.
 ///
 struct AHR_RequestListNode;
@@ -106,7 +95,7 @@ static bool AHR_ProcessorIsResultBusy(AHR_Result_t *result);
 ///
 /// \brief  Add one Element to the Request-List.
 ///
-static void AHR_RequestListAdd(AHR_RequestList *list, AHR_Result_t *result);
+static bool AHR_RequestListAdd(AHR_RequestList *list, AHR_Result_t *result);
 ///
 /// \brief  Remove one Element from the Request-List.
 ///
@@ -114,7 +103,7 @@ static bool AHR_RequestListRemove(AHR_RequestList *list, void *handle);
 ///
 /// ≤brief  Find an Element in the Request-List.
 ///
-static AHR_Result_t* AHR_RequestListFind(AHR_RequestList *list, void *handle);
+static AHR_Result_t* AHR_RequestListFind(AHR_RequestList *list, void *handle); // cppcheck-suppress constParameterPointer
 ///
 /// \brief  Handle new incomin Requests.
 ///         Read and remove all Elements from the Request-List and add them to the active Requests list. 
@@ -152,13 +141,30 @@ AHR_Processor_t AHR_CreateProcessor(size_t max_objects, AHR_Logger_t logger)
     curl_global_init(CURL_GLOBAL_DEFAULT);
     
     AHR_Processor_t processor = malloc(sizeof(struct AHR_Processor));
+    //
+    // If the Object was not allocated, return immediately...
+    //
+    if(!processor)
+    {
+        return NULL;
+    }
     processor->handle = AHR_CurlMultiInit(); 
+    //
+    // If the Curl Handle was not allocated, there is no point in going on...
+    //
+    if(!processor->handle)
+    {
+        goto on_error;
+    }
     
     // TODO: 
     //  - Malloc only on init -> pre-create all Resultobjects
     //  - Make url reconfigurable in request objects
     //  - Make Callback reconfigurable in response objects
     processor->result_store = AHR_CreateResultStore(max_objects);
+    // 
+    // TODO: Check if the Result Store is valid...
+    //
     for(size_t i = 0;i<AHR_ResultStoreSize(&processor->result_store); ++i)
     {
         AHR_Result_t *result = AHR_ResultStoreGetResult(&processor->result_store, i);
@@ -180,6 +186,13 @@ AHR_Processor_t AHR_CreateProcessor(size_t max_objects, AHR_Logger_t logger)
     processor->thread_id = (pthread_t)NULL;
 
     return processor;
+
+    //
+    // On Error all Ressources shall be freed.
+    //
+    on_error:
+    AHR_DestroyProcessor(&processor);
+    return NULL;
 }
 
 void AHR_DestroyProcessor(AHR_Processor_t *processor)
@@ -245,6 +258,11 @@ AHR_ProcessorStatus_t AHR_ProcessorPrepareRequest(
 )
 {
     //
+    // All buffers are constructed and assigned accourding to the defined Macros.
+    // Bufferchecks for size are not neccessarry if the initial Macro Values are respected.
+    //
+
+    //
     // Assertions...
     //
     assert(NULL != request_data);
@@ -266,10 +284,17 @@ AHR_ProcessorStatus_t AHR_ProcessorPrepareRequest(
     if(request_data->body)
     {
         memset(result->request_data.body, '\0', AHR_PROCESSOR_MAX_BODY_SIZE+1);
-        memcpy(result->request_data.body, request_data->body, strlen(request_data->body));
+        memcpy( // flawfinder: ignore
+            result->request_data.body, 
+            request_data->body, 
+            strnlen(
+                request_data->body, 
+                AHR_PROCESSOR_MAX_BODY_SIZE
+            )
+        );
     }
     memset(result->request_data.url, '\0', AHR_PROCESSOR_MAX_URL_LEN+1);
-    memcpy(result->request_data.url, request_data->url, AHR_PROCESSOR_MAX_URL_LEN);
+    memcpy(result->request_data.url, request_data->url, AHR_PROCESSOR_MAX_URL_LEN); // flawfinder: ignore
 
     result->user_data = data;
     return AHR_PROC_OK; 
@@ -560,7 +585,7 @@ static void* AHR_ProcessorThreadFunc(void *arg)
     return NULL;
 }
 
-static void AHR_RequestListAdd(AHR_RequestList *list, AHR_Result_t *result)
+static bool AHR_RequestListAdd(AHR_RequestList *list, AHR_Result_t *result)
 {
     if(list->head)
     {
@@ -570,19 +595,32 @@ static void AHR_RequestListAdd(AHR_RequestList *list, AHR_Result_t *result)
             current = current->next;
         }
         current->next = malloc(sizeof(struct AHR_RequestListNode));
-        current->next->next = NULL;
-        current->next->result = result;
+        if(current->next)
+        {
+            current->next->next = NULL;
+            current->next->result = result;
+            return true;
+        }
     }
     else
     {
         list->head = malloc(sizeof(struct AHR_RequestListNode));
-        list->head->next = NULL;
-        list->head->result = result;
+        if(list->head)
+        {
+            list->head->next = NULL;
+            list->head->result = result;
+            return true;
+        }
     }
+    return false;
 } 
 
-static bool AHR_RequestListRemove(AHR_RequestList *list, void *handle)
+static bool AHR_RequestListRemove(AHR_RequestList *list, void *handle) // cppcheck-suppress constParameterPointer
 {
+    //
+    // The Argument "handle" is not made const because someone can retrive it later on 
+    // via another call to one of teh List Functions and do work with it.
+    //
     if(NULL == list->head)
     {
         return false;
@@ -614,8 +652,12 @@ static bool AHR_RequestListRemove(AHR_RequestList *list, void *handle)
     return false;
 }
 
-static AHR_Result_t* AHR_RequestListFind(AHR_RequestList *list, void *handle)
+static AHR_Result_t* AHR_RequestListFind(AHR_RequestList *list, void *handle) // cppcheck-suppress constParameterPointer
 {
+    //
+    // The Argument "handle" is not made const because someone can retrive it later on 
+    // via another call to one of teh List Functions and do work with it.
+    //
     struct AHR_RequestListNode *current = list->head;
     while(current)
     {
@@ -676,13 +718,13 @@ static void AHR_CurlMultiInfoReadErrorCallback(
         &processor->result_list,
         AHR_CurlGetHandle(handle)
     );
-    assert(NULL != result->user_data.on_error);
 
     if(!result)
     {
         AHR_LogError(processor->logger, "Error expecting to find Result Object, but do not found it.");
         return;
     }
+    assert(NULL != result->user_data.on_error);
     result->user_data.on_error(
         result->user_data.data,
         AHR_ResultStoreObjectIndex(&processor->result_store, result),

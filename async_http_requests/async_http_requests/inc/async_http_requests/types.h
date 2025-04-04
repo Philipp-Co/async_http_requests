@@ -17,6 +17,9 @@
 
 #define AHR_HEADER_NMAX 256
 
+#define AHR_PROCESSOR_MAX_URL_LEN (4096-1)
+#define AHR_PROCESSOR_MAX_BODY_SIZE ((4096 * 16)-1)
+
 //
 // --------------------------------------------------------------------------------------------------------------------
 //
@@ -32,8 +35,8 @@ typedef struct AHR_Curl* AHR_Curl_t;
 
 typedef struct
 {
-    char name[AHR_HEADERENTRY_NAME_LEN];
-    char value[AHR_HEADERENTRY_VALUE_LEN];
+    char name[AHR_HEADERENTRY_NAME_LEN]; // flawfinder: ignore
+    char value[AHR_HEADERENTRY_VALUE_LEN]; // flawfinder: ignore
 } AHR_HeaderEntry_t;
 
 typedef struct 

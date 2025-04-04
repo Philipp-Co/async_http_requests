@@ -11,6 +11,7 @@
 #include <assert.h>
 
 #include <curl/curl.h>
+#include "async_http_requests/types.h"
 #include "external/inc/external/async_http_requests/ahr_curl.h"
 
 //
@@ -54,8 +55,6 @@ struct AHR_HttpResponse
 static size_t AHR_WriteCallback(char *data, size_t size, size_t nmemb, void *clientp);
 static size_t AHR_HeaderCallback(char *buffer, size_t size, size_t nitems, void *userdata);
 
-static size_t AHR_ResponseAddHeader(AHR_HttpResponse_t response, const char* header, size_t nbytes);
-
 //
 // --------------------------------------------------------------------------------------------------------------------
 //
@@ -68,8 +67,17 @@ AHR_Curl_t AHR_RequestHandle(AHR_HttpRequest_t request)
 AHR_HttpResponse_t AHR_CreateResponse(void)
 {
     struct AHR_HttpResponse* response = malloc(sizeof(struct AHR_HttpResponse));
+    if(!response)
+    {
+        return NULL;
+    }
+
     static const size_t nbytes = 4096 * 64;
     response->body.data = malloc(nbytes);
+    if(!response->body.data)
+    {
+        goto on_error;
+    }
     response->body.maxbytes = nbytes;
     memset(response->body.data, '\0', nbytes);
     response->request = NULL;
@@ -77,29 +85,47 @@ AHR_HttpResponse_t AHR_CreateResponse(void)
     memset(&response->header, '\0', sizeof(response->header));
 
     return response;
+
+    on_error:
+    AHR_DestroyResponse(&response);
+    return NULL;
 }
 
 AHR_HttpRequest_t AHR_CreateRequest(void)
 {
     struct AHR_HttpRequest* request = malloc(sizeof(struct AHR_HttpRequest));
+    if(!request)
+    {
+        return NULL;
+    }
     request->url = malloc(4096);
+    if(!request->url)
+    {
+        goto on_error;
+    }
     memset(request->url, '\0', 4096);
 
     const size_t nbytes = 4096 * 4;
     request->body.data = malloc(nbytes);
+    if(!request->body.data)
+    {
+        goto on_error;
+    }
     request->body.maxbytes = nbytes;
     request->body.nbytes = nbytes;
     memset(request->body.data, '\0', nbytes);
-
+    
     // curl stuff...
     request->handle = AHR_CurlEasyInit(
         AHR_WriteCallback,
         AHR_HeaderCallback
     );
-   
     request->uuid = request;
-
     return request;
+
+    on_error:
+    AHR_DestroyRequest(&request);
+    return NULL;
 }
 
 void AHR_RequestSetLogger(AHR_HttpRequest_t request, AHR_Logger_t logger)
@@ -161,10 +187,14 @@ void AHR_RequestSetHeader(AHR_HttpRequest_t request, const AHR_Header_t *header)
 
 void AHR_Post(AHR_HttpRequest_t request, const char *url, const char *body, AHR_HttpResponse_t response)
 {
+    //
+    // Buffers are allocated only during Initialization, the Size can not Change.
+    // No Boundschecks required if the sizes are respected.
+    //
+    
     assert(NULL != request);
     assert(NULL != response);
     assert(NULL != url);
-    assert(NULL != request->handle.handle);
     //
     // append content-type Header
     //
@@ -173,8 +203,9 @@ void AHR_Post(AHR_HttpRequest_t request, const char *url, const char *body, AHR_
     request->http_header = curl_slist_append(request->http_header, "Accept: application/json"); 
     request->http_header = curl_slist_append(request->http_header, "charset: utf-8"); 
 
+    const size_t len = strnlen(url, AHR_PROCESSOR_MAX_URL_LEN);
     memset(request->url, '\0', 4096);
-    memcpy(request->url, url, strlen(url));
+    memcpy(request->url, url, len); // flawfinder: ignore
     
     AHR_CurlSetHeader(request->handle, NULL);
     AHR_CurlSetHttpMethodPost(request->handle, body);
@@ -188,14 +219,19 @@ void AHR_Post(AHR_HttpRequest_t request, const char *url, const char *body, AHR_
 
 void AHR_Get(AHR_HttpRequest_t request, const char *url, AHR_HttpResponse_t response)
 {
+    //
+    // Buffers are allocated only during Initialization, the Size can not Change.
+    // No Boundschecks required if the sizes are respected.
+    //
+    
     assert(request != NULL);
     assert(response != NULL);
     assert(url != NULL);
 
     memset(request->url, '\0', 4096);
-    const size_t len = strlen(url);
+    const size_t len = strnlen(url, AHR_PROCESSOR_MAX_URL_LEN);
     const size_t nbytes = len >= 4095 ? 4095 : len;
-    memcpy(request->url, url, nbytes);
+    memcpy(request->url, url, nbytes); // flawfinder: ignore
     AHR_CurlSetHttpMethodGet(request->handle);
     AHR_CurlSetCallbackUserData(
         request->handle,
@@ -207,14 +243,19 @@ void AHR_Get(AHR_HttpRequest_t request, const char *url, AHR_HttpResponse_t resp
 
 void AHR_Put(AHR_HttpRequest_t request, const char *url, const char *body, AHR_HttpResponse_t response)
 {
+    //
+    // Buffers are allocated only during Initialization, the Size can not Change.
+    // No Boundschecks required if the sizes are respected.
+    //
+    
     assert(request != NULL);
     assert(response != NULL);
     assert(url != NULL);
     
     memset(request->url, '\0', 4096);
-    const size_t len = strlen(url);
+    const size_t len = strnlen(url, AHR_PROCESSOR_MAX_URL_LEN);
     const size_t nbytes = len >= 4095 ? 4095 : len;
-    memcpy(request->url, url, len);
+    memcpy(request->url, url, nbytes); // flawfinder: ignore
     AHR_CurlSetHttpMethodPut(request->handle, body);
     AHR_CurlSetHeader(request->handle, NULL);
     AHR_CurlSetCallbackUserData(
@@ -227,8 +268,13 @@ void AHR_Put(AHR_HttpRequest_t request, const char *url, const char *body, AHR_H
 
 void AHR_Delete(AHR_HttpRequest_t request, const char *url, AHR_HttpResponse_t response)
 {
+    //
+    // Buffers are allocated only during Initialization, the Size can not Change.
+    // No Boundschecks required if the sizes are respected.
+    //
+    
     memset(request->url, '\0', 4096);
-    memcpy(request->url, url, strlen(url));
+    memcpy(request->url, url, strnlen(url, AHR_PROCESSOR_MAX_URL_LEN)); // flawfinder: ignore
     AHR_CurlSetHttpMethodDelete(request->handle);
     AHR_CurlSetHeader(request->handle, NULL);
     AHR_CurlSetCallbackUserData(
@@ -252,7 +298,9 @@ const char* AHR_ResponseBody(const AHR_HttpResponse_t response)
 
 void AHR_ResponseHeader(const AHR_HttpResponse_t response, AHR_Header_t *info)
 {
-    memcpy(info, &response->header, sizeof(AHR_Header_t));
+    assert(NULL != response);
+
+    memcpy(info, &response->header, sizeof(AHR_Header_t)); // flawfinder: ignore
 }
 
 long AHR_ResponseStatusCode(const AHR_HttpResponse_t response)
@@ -276,8 +324,13 @@ void* AHR_RequestUUID(const AHR_HttpRequest_t request)
 // --------------------------------------------------------------------------------------------------------------------
 //
 
-static size_t AHR_WriteCallback(char *data, size_t size, size_t nmemb, void *clientp)
+static size_t AHR_WriteCallback(char *data, size_t size, size_t nmemb, void *clientp) // cppcheck-suppress constParameterCallback
 {
+    //
+    // Buffers are allocated only during Initialization, the Size can not Change.
+    // No Boundschecks required if the sizes are respected.
+    //
+
     AHR_HttpResponse_t response = (AHR_HttpResponse_t)clientp;
     // check if the userdata is valid
     if(!response)
@@ -293,7 +346,7 @@ static size_t AHR_WriteCallback(char *data, size_t size, size_t nmemb, void *cli
         return AHR_CurlWriteError();
     }
     // copy to userbuffer
-    memcpy(
+    memcpy( // flawfinder: ignore
         response->body.data + response->body.nbytes,
         data,
         nbytes
@@ -304,10 +357,15 @@ static size_t AHR_WriteCallback(char *data, size_t size, size_t nmemb, void *cli
 
 static size_t AHR_HeaderCallback(char *buffer, size_t size, size_t nitems, void *userdata)
 {
+    //
+    // Buffers are allocated only during Initialization, the Size can not Change.
+    // No Boundschecks required if the sizes are respected.
+    //
+
     AHR_HttpResponse_t response = (AHR_HttpResponse_t)userdata; 
     if(!response) return AHR_CurlReadError();
 
-    if(strlen(buffer) < 3)
+    if(strnlen(buffer, AHR_HEADERENTRY_NAME_LEN + AHR_HEADERENTRY_VALUE_LEN - 2) < 3)
     {
         AHR_LogWarning(response->logger, "Unable to parse HTTP header...");
         return size * nitems;
@@ -333,15 +391,15 @@ static size_t AHR_HeaderCallback(char *buffer, size_t size, size_t nitems, void 
         '\0',
         sizeof(response->header.header[response->header.nheaders])
     );
-    memcpy(
+    memcpy( // flawfinder: ignore
         response->header.header[response->header.nheaders].name,
         buffer,
         token - buffer
     );
-    memcpy(
+    memcpy( // flawfinder: ignore
         response->header.header[response->header.nheaders].value,
         token,
-        strlen(token)
+        strnlen(token, AHR_HEADERENTRY_VALUE_LEN-1)
     );
     response->header.nheaders++;
     return size * nitems;

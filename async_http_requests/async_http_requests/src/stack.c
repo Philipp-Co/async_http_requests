@@ -28,7 +28,7 @@ void AHR_DestroyStack(AHR_Stack_t *stack)
 void* AHR_StackPop(AHR_Stack_t *stack)
 {
     assert(NULL != stack->data);
-    if(stack->top <= 0)
+    if(stack->top == 0U)
     {
         return NULL;
     }

@@ -21,9 +21,9 @@
 // --------------------------------------------------------------------------------------------------------------------
 //
 
-#define AHR_LOGLEVEL_INFO 2
-#define AHR_LOGLEVEL_WARNING 1
-#define AHR_LOGLEVEL_ERROR 0
+#define AHR_LOGLEVEL_INFO 2U
+#define AHR_LOGLEVEL_WARNING 1U
+#define AHR_LOGLEVEL_ERROR 0U
 
 //
 // --------------------------------------------------------------------------------------------------------------------

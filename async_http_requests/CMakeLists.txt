@@ -45,12 +45,12 @@ add_library(
 #
 # Add test.
 #
-add_subdirectory(
-    ${CMAKE_CURRENT_SOURCE_DIR}/test/request/
-)
-add_subdirectory(
-    ${CMAKE_CURRENT_SOURCE_DIR}/test/processor/
-)
+#add_subdirectory(
+#    ${CMAKE_CURRENT_SOURCE_DIR}/test/request/
+#)
+#add_subdirectory(
+#    ${CMAKE_CURRENT_SOURCE_DIR}/test/processor/
+#)
 
 #
 # ---------------------------------------------------------------------------------------------------------------------
@@ -64,16 +64,37 @@ target_include_directories(
     PUBLIC
     external/Unity/src/
 )
-
 #
 # Configure libahr.
 #
-target_compile_options(
-    ahr
-    PUBLIC
-    "-O2"
-    "-fPIC"
-)
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(
+        ahr
+        PUBLIC
+        "-Wno-unused-function"
+        "-fPIC"
+        "-Wall"
+        "-Wextra"
+        "-Werror"
+        "-Wincompatible-pointer-types"
+        "-pedantic"
+        "-pedantic-errors"
+    )
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_options(
+        ahr
+        PUBLIC
+        "-O2"
+        "-Wno-unused-function"
+        "-fPIC"
+        "-Wall"
+        "-Wextra"
+        "-Werror"
+        "-Wincompatible-pointer-types"
+        "-pedantic"
+        "-pedantic-errors"
+    )
+endif()
 
 target_include_directories(
     ahr

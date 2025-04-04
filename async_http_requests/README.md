@@ -50,6 +50,19 @@ The public Interface of the HttpProcessor itselve is Threadsafe.
 
 How to build libahr.
 
+## Static Code Analysis
+
+flawfinder:
+
+    python -m .venv && source ./venv/bin/activate
+    pip install -r requirements.txt
+    ./flawfinder.sh
+
+cppcheck:
+Before using the cppcheck Scripts, install cppcheck, https://cppcheck.sourceforge.io/.
+
+    ./cppcheck.sh
+
 ## Requirements
 
     Tools needed:

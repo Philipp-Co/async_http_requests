@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <stdarg.h>
+#include <assert.h>
 
 #include <async_http_requests/logging.h>
 
@@ -40,6 +41,10 @@ AHR_Logger_t AHR_CreateLogger(
     assert(error != NULL);
 
     struct AHR_Logger *logger = malloc(sizeof(struct AHR_Logger));    
+    if(!logger)
+    {
+        return NULL;
+    }
 
     pthread_mutex_init(&logger->mutex, NULL);
 
@@ -61,7 +66,8 @@ void AHR_DestroyLogger(AHR_Logger_t *logger)
 
 void AHR_LoggerSetLoglevel(AHR_Logger_t logger, size_t loglevel)
 {
-    if(loglevel >= AHR_LOGLEVEL_ERROR && loglevel < AHR_LOGLEVEL_INFO)
+    assert(NULL != logger);
+    if(loglevel >= AHR_LOGLEVEL_ERROR && loglevel < AHR_LOGLEVEL_INFO) // cppcheck-suppress unsignedPositive
     {
         logger->loglevel = loglevel;
     }
@@ -69,7 +75,8 @@ void AHR_LoggerSetLoglevel(AHR_Logger_t logger, size_t loglevel)
 
 void AHR_LogInfo(AHR_Logger_t logger, const char *msg)
 {
-    if(logger && logger->loglevel >= AHR_LOGLEVEL_INFO)
+    assert(NULL != logger);
+    if(logger && (logger->loglevel >= AHR_LOGLEVEL_INFO)) // cppcheck-suppress unsignedPositive
     {
         logger->info(logger->arg, msg);
     }
@@ -77,13 +84,15 @@ void AHR_LogInfo(AHR_Logger_t logger, const char *msg)
 
 void AHR_LogWarning(AHR_Logger_t logger, const char *msg)
 {
-    if(logger && logger->loglevel >= AHR_LOGLEVEL_WARNING)
+    assert(NULL != logger);
+    if(logger && (logger->loglevel >= AHR_LOGLEVEL_WARNING)) // cppcheck-suppress unsignedPositive
         logger->warning(logger->arg, msg);
 }
 
 void AHR_LogError(AHR_Logger_t logger, const char *msg)
 {
-    if(logger && logger->loglevel >= AHR_LOGLEVEL_ERROR)
+    assert(NULL != logger);
+    if(logger && (logger->loglevel >= AHR_LOGLEVEL_ERROR)) // cppcheck-suppress unsignedPositive
         logger->error(logger->arg, msg);
 }
 //

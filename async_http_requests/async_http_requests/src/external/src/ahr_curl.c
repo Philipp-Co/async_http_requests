@@ -98,7 +98,13 @@ AHR_Curl_t AHR_CurlEasyInit(
             .size = 0
         }
     };
+
     AHR_Curl_t result = (AHR_Curl_t)malloc(sizeof(struct AHR_Curl));
+    if(!result)
+    {
+        return NULL;
+    }
+
     *result = content;
     return result;
 }
@@ -140,11 +146,11 @@ void AHR_CurlSetHeader(AHR_Curl_t handle, const AHR_Header_t *header)
         curl_slist_free_all(handle->http_header);
     }
     
-    char buffer[AHR_HEADERENTRY_NAME_LEN + AHR_HEADERENTRY_VALUE_LEN + 2];
+    char buffer[AHR_HEADERENTRY_NAME_LEN + AHR_HEADERENTRY_VALUE_LEN + 2]; // flawfinder: ignore
     handle->http_header = NULL;
     for(size_t i=0;i<header->nheaders;++i)
     {
-        sprintf(buffer, "%s:%s", header->header[i].name, header->header[i].value);
+        snprintf(buffer, sizeof(buffer), "%s:%s", header->header[i].name, header->header[i].value);
         handle->http_header = curl_slist_append(handle->http_header, buffer);
     }
     curl_easy_setopt(handle->handle, CURLOPT_HTTPHEADER, handle->http_header);
@@ -175,13 +181,13 @@ void AHR_CurlSetHttpMethodGet(AHR_Curl_t handle)
 
 void AHR_CurlSetHttpMethodPost(AHR_Curl_t handle, const char *body)
 {
-    assert(NULL != handle.handle);
+    assert(NULL != handle->handle);
     handle->http_header = curl_slist_append(handle->http_header, "Accept: application/json");
     handle->http_header = curl_slist_append(handle->http_header, "Content-Type: application/json");
     curl_easy_setopt(handle->handle, CURLOPT_HTTPHEADER, handle->http_header);
     if(body)
     {
-        curl_easy_setopt(handle->handle, CURLOPT_POSTFIELDSIZE, (long)strlen(body));
+        curl_easy_setopt(handle->handle, CURLOPT_POSTFIELDSIZE, (long)strnlen(body, MAX_UPLOAD_SIZE-1));
         curl_easy_setopt(handle->handle, CURLOPT_COPYPOSTFIELDS, body);
     }
 }
@@ -192,6 +198,11 @@ void AHR_CurlSetHttpMethodPost(AHR_Curl_t handle, const char *body)
 
 static size_t AHR_PutReadCallback(char *ptr, size_t size, size_t nmemb, void *stream)
 {
+    //
+    // malloc is used only on Initialization.
+    // No Bufferchecks required if the initial Size is respected.
+    //
+    
     AHR_Curl_t handle = (AHR_Curl_t)stream;
     if(handle->file_transfer.data && handle->file_transfer.size)
     {
@@ -202,7 +213,7 @@ static size_t AHR_PutReadCallback(char *ptr, size_t size, size_t nmemb, void *st
         {
             bytes_to_transfer = output_buffer_size;
         }
-        memcpy(
+        memcpy( // flawfinder: ignore
             ptr, 
             &handle->file_transfer.data[handle->file_transfer.current_pos], 
             bytes_to_transfer
@@ -217,9 +228,14 @@ static size_t AHR_PutReadCallback(char *ptr, size_t size, size_t nmemb, void *st
 
 void AHR_CurlSetHttpMethodPut(AHR_Curl_t handle, const char *body)
 {
+    //
+    // malloc is used only on Initialization.
+    // No Bufferchecks required if the initial Size is respected.
+    //
+
     assert(NULL != body);
 
-    const size_t body_size = strlen(body);
+    const size_t body_size = strnlen(body, MAX_UPLOAD_SIZE-1);
     if(body_size >= (MAX_UPLOAD_SIZE - 1))
     {
         return;
@@ -235,7 +251,11 @@ void AHR_CurlSetHttpMethodPut(AHR_Curl_t handle, const char *body)
     curl_easy_setopt(handle->handle, CURLOPT_PUT, 1L);
     curl_easy_setopt(handle->handle, CURLOPT_UPLOAD, 1L);
     memset(handle->file_transfer.data, '\0', MAX_UPLOAD_SIZE);
-    memcpy(handle->file_transfer.data, body, strlen(body));
+    memcpy( // flawfinder: ignore
+        handle->file_transfer.data, 
+        body, 
+        strnlen(body, body_size)
+    );
     handle->file_transfer.current_pos = 0;
     handle->file_transfer.size = body_size;
     curl_easy_setopt(handle->handle, CURLOPT_INFILESIZE, (long)body_size);
@@ -304,8 +324,18 @@ void AHR_CurlMultiRemoveHandle(
 AHR_CurlM_t AHR_CurlMultiInit(void)
 {
     AHR_CurlM_t result = malloc(sizeof(struct AHR_CurlM));
+    if(!result)
+    {
+        return NULL;
+    }
     
     result->handle = curl_multi_init(); 
+    if(!result->handle)
+    {
+        free(result);
+        return NULL;
+    }
+
     result->easy_handles = NULL;
 
     return result;
@@ -357,8 +387,8 @@ bool AHR_CurlMultiPerform(AHR_CurlM_t handle, int *running_handles)
     assert(NULL != handle);
     assert(NULL != handle->handle);
     
-    const CURLcode c = curl_multi_perform(handle->handle, running_handles);
-    return c == CURLE_OK;
+    const CURLMcode c = curl_multi_perform(handle->handle, running_handles);
+    return c == CURLM_OK;
 }
 
 void AHR_CurlMultiPoll(AHR_CurlM_t handle)
@@ -391,6 +421,13 @@ static struct AHR_CurlEasyHandleList* AHR_CurlEasyHandleListAppendEasyHandle(
     assert(NULL != easy_handle->handle);
 
     struct AHR_CurlEasyHandleList *result = malloc(sizeof(struct AHR_CurlEasyHandleList));
+    if(!result)
+    {
+        //
+        // TODO: Caller does not see that an error occured.
+        //
+        return list;
+    }
     result->easy_handle = easy_handle;
     result->next = NULL;
     if(list)
@@ -451,7 +488,7 @@ static struct AHR_CurlEasyHandleList* AHR_CurlEasyHandleListRemoveEasyHandle(
 
 static AHR_Curl_t AHR_CurlEasyHandleListFindEasyHandle(
     struct AHR_CurlEasyHandleList *list,
-    void *easy_handle 
+    void *easy_handle // cppcheck-suppress constParameterPointer 
 )
 {
     assert(NULL != easy_handle);
@@ -473,10 +510,9 @@ static struct AHR_CurlEasyHandleList* AHR_CurlEasyHandleListRemoveAll(
 )
 {
     struct AHR_CurlEasyHandleList *next = list;
-    struct AHR_CurlEasyHandleList *tmp;
     while(next)
     {
-        tmp = next;
+        struct AHR_CurlEasyHandleList *tmp = next;
         next = next->next;
         free(tmp);
     }
