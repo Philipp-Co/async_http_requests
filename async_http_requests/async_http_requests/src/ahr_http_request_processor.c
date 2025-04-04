@@ -16,6 +16,7 @@
 #include <async_http_requests/private/ahr_result.h>
 #include <external/async_http_requests/ahr_mutex.h>
 #include <external/async_http_requests/ahr_thread.h>
+#include <async_http_requests/private/ahr_logging.h>
 
 #include <assert.h>
 #include <unistd.h>
@@ -146,6 +147,7 @@ AHR_Processor_t AHR_CreateProcessor(size_t max_objects, AHR_Logger_t logger)
     //
     if(!processor)
     {
+        AHR_LogError(logger, "Unable to allocate Memory for this HTTP Reqeust Processor.\n");
         return NULL;
     }
     processor->handle = AHR_CurlMultiInit(); 
@@ -154,6 +156,7 @@ AHR_Processor_t AHR_CreateProcessor(size_t max_objects, AHR_Logger_t logger)
     //
     if(!processor->handle)
     {
+        AHR_LogError(logger, "Unable to create CURL Multi Handle.\n");
         goto on_error;
     }
     
@@ -225,7 +228,7 @@ bool AHR_ProcessorStart(AHR_Processor_t processor)
         return true;
     }
     // ----
-    AHR_LogError(processor->logger, "Thread Error!\n");
+    AHR_LogError(processor->logger, "Unable to create Thread.\n");
     return false;
 }
 
@@ -302,6 +305,8 @@ AHR_ProcessorStatus_t AHR_ProcessorPrepareRequest(
 
 AHR_ProcessorStatus_t AHR_ProcessorMakeRequest(AHR_Processor_t processor, size_t object)
 {
+    assert(NULL != processor);
+
     AHR_ProcessorStatus_t retval = AHR_PROC_OK;
     AHR_MutexLock(processor->mutex);
     AHR_Result_t *result = AHR_ResultStoreGetResult(
