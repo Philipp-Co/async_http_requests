@@ -15,6 +15,8 @@
 // --------------------------------------------------------------------------------------------------------------------
 //
 
+#include <async_http_requests/ahr_types.h>
+
 #include <stddef.h>
 
 //
@@ -32,9 +34,6 @@
 typedef void (*AHR_LogInfo_t)(void *arg, const char *str);
 typedef void (*AHR_LogWarning_t)(void *arg, const char *str);
 typedef void (*AHR_LogError_t)(void *arg, const char *str);
-
-struct AHR_Logger;
-typedef struct AHR_Logger* AHR_Logger_t;
 
 //
 // --------------------------------------------------------------------------------------------------------------------

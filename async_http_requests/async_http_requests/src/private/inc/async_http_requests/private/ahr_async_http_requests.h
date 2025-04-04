@@ -26,8 +26,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-#include <async_http_requests/logging.h>
-#include <async_http_requests/types.h>
+#include <async_http_requests/private/ahr_logging.h>
+#include <async_http_requests/ahr_types.h>
 
 //
 // --------------------------------------------------------------------------------------------------------------------

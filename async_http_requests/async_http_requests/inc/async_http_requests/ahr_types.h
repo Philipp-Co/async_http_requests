@@ -24,6 +24,9 @@
 // --------------------------------------------------------------------------------------------------------------------
 //
 
+struct AHR_Logger;
+typedef struct AHR_Logger* AHR_Logger_t;
+
 struct AHR_HttpRequest;
 typedef struct AHR_HttpRequest* AHR_HttpRequest_t;
 

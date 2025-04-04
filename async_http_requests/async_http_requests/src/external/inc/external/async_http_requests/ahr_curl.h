@@ -5,7 +5,7 @@
 // --------------------------------------------------------------------------------------------------------------------
 //
 
-#include <async_http_requests/async_http_requests.h>
+#include <async_http_requests/private/ahr_async_http_requests.h>
 #include <stdbool.h>
 
 //

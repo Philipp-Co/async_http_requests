@@ -5,8 +5,8 @@
 // --------------------------------------------------------------------------------------------------------------------
 //
 
-#include <async_http_requests/async_http_requests.h>
-#include <async_http_requests/types.h>
+#include <async_http_requests/private/ahr_async_http_requests.h>
+#include <async_http_requests/ahr_types.h>
 
 #include <stdatomic.h>
 

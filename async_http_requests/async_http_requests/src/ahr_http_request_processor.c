@@ -9,17 +9,17 @@
 //
 // --------------------------------------------------------------------------------------------------------------------
 //
-#include <async_http_requests/request_processor.h>
-#include <async_http_requests/async_http_requests.h>
-#include <async_http_requests/stack.h>
+#include <async_http_requests/ahr_http_request_processor.h>
+#include <async_http_requests/private/ahr_async_http_requests.h>
+#include <async_http_requests/private/ahr_stack.h>
 #include "external/inc/external/async_http_requests/ahr_curl.h"
-#include <async_http_requests/private/result.h>
-#include <async_http_requests/private/ahr_mutex.h>
+#include <async_http_requests/private/ahr_result.h>
+#include <external/async_http_requests/ahr_mutex.h>
+#include <external/async_http_requests/ahr_thread.h>
 
 #include <assert.h>
 #include <unistd.h>
 #include <stdio.h>
-#include <pthread.h>
 #include <stdatomic.h>
 #include <errno.h>
 #include <string.h>
@@ -59,7 +59,7 @@ struct AHR_Processor
     ///
     /// \brief  Thread Id.
     /// 
-    pthread_t thread_id;
+    AHR_Thread_t thread;
     ///
     /// \brief Decide when to terminate the internal Thread. 0 = run, 1 = terminate.
     ///
@@ -178,12 +178,11 @@ AHR_Processor_t AHR_CreateProcessor(size_t max_objects, AHR_Logger_t logger)
     processor->requests = AHR_CraeteStack(max_objects);
     processor->result_list.head = NULL;
     
-    //pthread_mutex_init(&(processor->mutex), NULL);
     processor->mutex = AHR_CreateMutex();
     atomic_store(&(processor->terminate), 0);
 
     processor->logger = logger;
-    processor->thread_id = (pthread_t)NULL;
+    processor->thread = (AHR_Thread_t)NULL;
 
     return processor;
 
@@ -210,7 +209,7 @@ void AHR_DestroyProcessor(AHR_Processor_t *processor)
 bool AHR_ProcessorStart(AHR_Processor_t processor)
 {
     // ----
-    if((pthread_t)NULL != processor->thread_id)
+    if((AHR_Thread_t)NULL != processor->thread)
     {
         AHR_LogWarning(
             processor->logger, 
@@ -220,23 +219,24 @@ bool AHR_ProcessorStart(AHR_Processor_t processor)
     }
     // ----
     atomic_store(&processor->terminate, 0);
-    if(0 == pthread_create(&(processor->thread_id), NULL, AHR_ProcessorThreadFunc, processor))
+    processor->thread = AHR_CreateThread(AHR_ProcessorThreadFunc, processor);
+    if(NULL != processor->thread)
     {
         return true;
     }
     // ----
-    AHR_LogError(processor->logger, "pthread Error!\n");
+    AHR_LogError(processor->logger, "Thread Error!\n");
     return false;
 }
 
 void AHR_ProcessorStop(AHR_Processor_t processor)
 {
-    if(processor->thread_id)
+    if(processor->thread)
     {
         atomic_store(&(processor->terminate), 1);
         void *result;
-        pthread_join(processor->thread_id, &result);
-        processor->thread_id = (pthread_t)NULL;
+        AHR_JoinThread(processor->thread, &result);
+        AHR_DestroyThread(&processor->thread);
     }
 }
 
@@ -303,7 +303,6 @@ AHR_ProcessorStatus_t AHR_ProcessorPrepareRequest(
 AHR_ProcessorStatus_t AHR_ProcessorMakeRequest(AHR_Processor_t processor, size_t object)
 {
     AHR_ProcessorStatus_t retval = AHR_PROC_OK;
-    //pthread_mutex_lock(&processor->mutex);
     AHR_MutexLock(processor->mutex);
     AHR_Result_t *result = AHR_ResultStoreGetResult(
         &processor->result_store,
@@ -334,7 +333,6 @@ AHR_ProcessorStatus_t AHR_ProcessorMakeRequest(AHR_Processor_t processor, size_t
     AHR_CurlMultiWeakUp(processor->handle);
 
 end:
-    //pthread_mutex_unlock(&processor->mutex);
     AHR_MutexUnlock(processor->mutex);
     return retval;
 }
@@ -388,7 +386,6 @@ AHR_ProcessorStatus_t AHR_ProcessorGet(
     AHR_Get(result->request, result->request_data.url, result->response);
     AHR_ProcessorUnlockResult(result);
 end:
-    //pthread_mutex_unlock(&processor->mutex);
     AHR_MutexUnlock(processor->mutex);
     return status;
 }
@@ -445,7 +442,6 @@ AHR_ProcessorStatus_t AHR_ProcessorPost(
     AHR_Post(result->request, result->request_data.url, result->request_data.body, result->response);
     AHR_ProcessorUnlockResult(result);
 end:
-    //pthread_mutex_unlock(&processor->mutex);
     AHR_MutexUnlock(processor->mutex);
     printf("POST!!!\n");
     printf("--> URL: %s\n", result->request_data.url);
@@ -504,7 +500,6 @@ AHR_ProcessorStatus_t AHR_ProcessorPut(
     AHR_Put(result->request, result->request_data.url, result->request_data.body, result->response);
     AHR_ProcessorUnlockResult(result);
 end:
-    //pthread_mutex_unlock(&processor->mutex);
     AHR_MutexUnlock(processor->mutex);
     printf("PUT!!!\n");
     printf("--> URL: %s\n", result->request_data.url);
@@ -560,7 +555,6 @@ AHR_ProcessorStatus_t AHR_ProcessorDelete(
     AHR_Delete(result->request, result->request_data.url, result->response);
     AHR_ProcessorUnlockResult(result);
 end:
-    //pthread_mutex_unlock(&processor->mutex);
     AHR_MutexUnlock(processor->mutex);
     printf("DELETE!!!\n");
     return status;
@@ -672,7 +666,6 @@ static AHR_Result_t* AHR_RequestListFind(AHR_RequestList *list, void *handle) //
 
 static void AHR_HandleNewRequests(AHR_Processor_t processor)
 {
-    //const int lresult = pthread_mutex_trylock(&processor->mutex);
     if(AHR_MutexTryLock(processor->mutex))
     {
         while(1)
@@ -699,7 +692,6 @@ static void AHR_HandleNewRequests(AHR_Processor_t processor)
                 break;
             }
         }
-        //pthread_mutex_unlock(&processor->mutex);
         AHR_MutexUnlock(processor->mutex);
     }
 }

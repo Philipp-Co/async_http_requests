@@ -3,8 +3,7 @@
 // --------------------------------------------------------------------------------------------------------------------
 //
 
-#include "async_http_requests/types.h"
-#include <async_http_requests/private/result.h>
+#include <async_http_requests/private/ahr_result.h>
 
 #include <stdlib.h>
 #include <assert.h>

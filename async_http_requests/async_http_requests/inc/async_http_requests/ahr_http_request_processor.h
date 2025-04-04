@@ -37,9 +37,7 @@
 //
 // --------------------------------------------------------------------------------------------------------------------
 //
-#include <async_http_requests/async_http_requests.h>
-#include <async_http_requests/logging.h>
-#include <async_http_requests/types.h>
+#include <async_http_requests/ahr_types.h>
 
 #include <stdlib.h>
 #include <stdbool.h>

@@ -5,7 +5,7 @@
 
 #include <assert.h>
 
-#include <async_http_requests/stack.h>
+#include <async_http_requests/private/ahr_stack.h>
 
 //
 // --------------------------------------------------------------------------------------------------------------------

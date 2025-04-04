@@ -33,13 +33,14 @@ add_library(
 #
 add_library(
     ahr SHARED
-    async_http_requests/src/async_http_requests.c
-    async_http_requests/src/request_processor.c
-    async_http_requests/src/stack.c
-    async_http_requests/src/logging.c
+    async_http_requests/src/private/src/ahr_async_http_requests.c
+    async_http_requests/src/ahr_http_request_processor.c
+    async_http_requests/src/private/src/ahr_stack.c
+    async_http_requests/src/private/src/ahr_logging.c
     async_http_requests/src/external/src/ahr_curl.c
-    async_http_requests/src/private/src/result.c
-    async_http_requests/src/private/src/ahr_mutex.c
+    async_http_requests/src/private/src/ahr_result.c
+    async_http_requests/src/external/src/ahr_mutex.c
+    async_http_requests/src/external/src/ahr_thread.c
 )
 
 #
@@ -71,6 +72,8 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_options(
         ahr
         PUBLIC
+        "-fsanitize=address"
+        "-fno-omit-frame-pointer"
         "-Wno-unused-function"
         "-fPIC"
         "-Wall"
@@ -79,6 +82,12 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
         "-Wincompatible-pointer-types"
         "-pedantic"
         "-pedantic-errors"
+    )
+    target_link_options(
+        ahr 
+        PUBLIC
+        "-fsanitize=address"
+        "-fno-omit-frame-pointer"
     )
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_options(

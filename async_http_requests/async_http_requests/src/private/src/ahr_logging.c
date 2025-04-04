@@ -3,13 +3,13 @@
 // --------------------------------------------------------------------------------------------------------------------
 //
 
+#include <async_http_requests/private/ahr_logging.h>
+
 #include <stdlib.h>
 #include <assert.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <assert.h>
-
-#include <async_http_requests/logging.h>
 
 //
 // --------------------------------------------------------------------------------------------------------------------
